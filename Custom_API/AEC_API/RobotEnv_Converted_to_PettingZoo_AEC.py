@@ -66,26 +66,42 @@ class RobotFactoryEnv(AECEnv):
             4: "Charge",
             5: "Shutdown"}
 
+        energy_cost = {
+            10:"Move",
+            15: "Assemble",
+            10: "Inspect",
+            -20: "Charge",
+            0: "Shutdown"
+        }
+
         selected_action = actions_map[action]
         print(f"➡️ {agent} executes: {selected_action}")
+        if selected_action in energy_cost:
+            self.energy_levels[agent] = max(0, self.energy_levels[agent] - energy_cost[selected_action])
 
-        if action == "Pick":
+        if selected_action == "Pick":
             if self.task_queue[agent]:
-                self.task_status[agent] = self.task_status[agent].pop(0)
+                self.task_status[agent] = self.task_queue[agent].pop(0)
                 print(f"{agent} picked task: {self.task_status[agent]}")
+            else:
+                print(f"{agent} has no tasks left")
 
-        elif action == "Move":
+        elif selected_action == "Move":
             if random.random() < 0.2:
                 print(f"{agent} encountered an obstacle and lost 10 energy")
-                self.energy_levels[agent] -= 10
+                self.energy_levels[agent]  = max(0, self.energy_levels[agent] - 10)
+                self.task_status[agent] = "Obstacle encountered"
             else:
-                self.task_status[agent] = "Moving"
+                self.task_status[agent] = "Moved"
+                print(f"{agent} is moving")
 
-        elif action == "Charge":
+        elif selected_action == "Charge":
             if self.energy_levels[agent] == 100:
                 print(f"{agent} is fully charged")
             else:
-                print(f"{agent} is still charging")
+                self.energy_levels[agent] = min(100, self.energy_levels[agent] + 20)
+                self.task_status[agent] = "Charging"
+                print(f"{agent} is still charging: {self.energy_levels[agent]}")
 
         elif selected_action == "Assemble":
             if random.random() < 0.8:
@@ -105,18 +121,25 @@ class RobotFactoryEnv(AECEnv):
 
 
 
-        elif action == "Shutdown":
+        elif selected_action == "Shutdown":
             self.terminations[agent] = True
             print(f"{agent} is shutting down")
 
         self.energy_levels[agent] -= random.randint(5, 15)
         if self.energy_levels[agent] <= 0:
             self.terminations[agent] = True
+            self.task_status[agent] = "Out of Energy"
             print(f"{agent} ran out of energy")
 
         self.agent_selection = next(self._agent_selector, None)
         if self.agent_selection is None:
-            self.agent_selection = iter(self.agents)
+            active_agents = [ a for a in self.agents if not self.terminations[a]]
+            if active_agents:
+                self._agent_selector= iter(active_agents)
+                self.agent_selection = next(self._agent_selector)
+            else:
+                print("All agents have completed their task!")
+                return
 
 
 
@@ -135,7 +158,7 @@ class RobotFactoryEnv(AECEnv):
         for agent in self.agents:
             print(f"{agent}: | Status: {self.task_status[agent]}"
                   f"| Energy: {self.energy_levels[agent]}"
-                  f"| Task left: {self.task_status[agent]}"
+                  f"| Task left: {self.task_queue[agent]if self.task_queue[agent] else 'No Tasks Left'}"
                   f"| Obstacles: {len(self.obstacles)}")
     def close(self):
         """Cleans up the environment."""
