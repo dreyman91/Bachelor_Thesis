@@ -3,6 +3,7 @@ import numpy as np
 from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
 from gymnasium import spaces
+import sys
 
 class RobotFactoryEnv(AECEnv):
     metadata = {'render.modes': ['human', 'rgb_array'], "name": "robot_factory_v1"}
@@ -49,7 +50,7 @@ class RobotFactoryEnv(AECEnv):
         if agent not in self.agents:
             return None
         return{
-            "energy": np.array([self.energy_levels[agent]], dtype=np.float32),
+            "energy": self.energy_levels[agent],
             "tasks_left": len(self.task_queue[agent]),
             "obstacles_nearby": len(self.obstacles)
         }
@@ -64,20 +65,27 @@ class RobotFactoryEnv(AECEnv):
             2: "Assemble",
             3: "Inspect",
             4: "Charge",
-            5: "Shutdown"}
+            5: "Shutdown",
+            6: "Quit"
+        }
 
         energy_cost = {
-            10:"Move",
-            15: "Assemble",
-            10: "Inspect",
-            -20: "Charge",
-            0: "Shutdown"
+            "Move": 10,
+            "Assemble": 15,
+            "Inspect": 10,
+            "Charge": -20,
+            "Shutdown": 0
         }
 
         selected_action = actions_map[action]
         print(f"➡️ {agent} executes: {selected_action}")
         if selected_action in energy_cost:
             self.energy_levels[agent] = max(0, self.energy_levels[agent] - energy_cost[selected_action])
+
+        if selected_action == "Quit":
+            print("Environment is Shutting down")
+            self.close()
+            sys.exit()
 
         if selected_action == "Pick":
             if self.task_queue[agent]:
@@ -95,41 +103,73 @@ class RobotFactoryEnv(AECEnv):
                 self.task_status[agent] = "Moved"
                 print(f"{agent} is moving")
 
+
+
+        # elif selected_action == ["Assemble", "Inspect"]:
+        #     if self.task_status[agent]:
+        #         completed_task = self.task_status[agent].pop(0)
+        #         self.task_status[agent] = f"completed_task: {completed_task}"
+        #         print(f"{agent} completed task: {completed_task[agent]}")
+        #
+        #         if not self.task_queue[agent]:
+        #             self.task_status[agent] = "No Tasks left"
+        #             print(f"{agent} has completed all tasks")
+        #
+        #     else:
+        #         print(f"{agent} has no tasks left")
+        elif action == "Assemble":
+            if random.random() < 0.8:
+                if self.task_queue[agent]:  # ✅ Only remove if tasks exist
+                    completed_task = self.task_queue[agent].pop(0)
+                    self.task_status[agent] = f"Completed: {completed_task}"
+                    print(f"✅ {agent} assembled a part and completed task: {completed_task}")
+                else:
+                    print(f"⚠️ {agent} has no tasks left!")
+
+        elif action == "Inspect":
+            if random.random() < 0.7:
+                self.task_status[agent] = "Inspection Failed"
+                print(f"❌ {agent} failed inspection. Needs rework!")
+            else:
+                if self.task_queue[agent]:  # ✅ Remove task if available
+                    completed_task = self.task_queue[agent].pop(0)
+                    self.task_status[agent] = f"Passed: {completed_task}"
+                    print(f"✅ {agent} passed inspection and completed task: {completed_task}!")
+                else:
+                    print(f"⚠️ {agent} has no tasks left to inspect!")
+
         elif selected_action == "Charge":
             if self.energy_levels[agent] == 100:
                 print(f"{agent} is fully charged")
             else:
+                previous_energy = self.energy_levels[agent]
                 self.energy_levels[agent] = min(100, self.energy_levels[agent] + 20)
                 self.task_status[agent] = "Charging"
-                print(f"{agent} is still charging: {self.energy_levels[agent]}")
-
-        elif selected_action == "Assemble":
-            if random.random() < 0.8:
-                self.task_status[agent] = "Assembly Completed"
-                print(f"🛠️ SUCCESS: {agent} assembled a part!")
-            else:
-                self.task_status[agent] = "Assembly Failed"
-                print(f"⚠️ FAILED: {agent} failed assembly, needs retry!")
-
-        elif selected_action == "Inspect":
-            if random.random() < 0.9:
-                self.task_status[agent] = "Inspection Passed"
-                print(f"✅ SUCCESS: {agent} passed inspection!")
-            else:
-                self.task_status[agent] = "Inspection Failed"
-                print(f"❌ FAILED: {agent} failed inspection, needs rework.")
-
-
+                print(f"{agent} is still charging: {previous_energy} → {self.energy_levels[agent]}")
 
         elif selected_action == "Shutdown":
             self.terminations[agent] = True
+            self.energy_levels[agent] = 0
             print(f"{agent} is shutting down")
+
+            # self.agents.remove(agent)
+            # if len(self.agents) == 0:
+            #     print("All agents have completed their tasks and are shutting down")
+            #     return
 
         self.energy_levels[agent] -= random.randint(5, 15)
         if self.energy_levels[agent] <= 0:
             self.terminations[agent] = True
             self.task_status[agent] = "Out of Energy"
             print(f"{agent} ran out of energy")
+
+        if self.terminations[agent]:
+            print(f"🚫 Removing {agent} from the environment.")
+            self.agents.remove(agent)
+
+        if not self.agents:
+            print("No agents left in the environment")
+            return
 
         self.agent_selection = next(self._agent_selector, None)
         if self.agent_selection is None:

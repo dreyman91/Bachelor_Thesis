@@ -103,7 +103,11 @@ class AEC_Enhanced_Robot:
         self.energy_levels[agent] -= random.randint(5,15)
         if self.energy_levels[agent] <= 0:
             self.terminations[agent] = True
+            self.task_status[agent] = "Out of Energy"
             print(f"‼️ {agent} ran out of energy and shut down!")
+
+        if agent in self.agents:
+            self.agents.remove(agent)
 
         # Move to next agent
         self.current_agent_index = (self.current_agent_index + 1) % len(self.agents)
