@@ -1,8 +1,9 @@
-from pettingzoo.mpe.simple_tag import env
+import pettingzoo.mpe as mpe
 
 import numpy as np
+import pandas as pd
 
-env = env(render_mode=None)
+env = mpe.simple_tag_v3.env(render_mode=None)
 env.reset()
 
 agent = env.agent_selection
@@ -14,12 +15,13 @@ env.step(action)
 
 new_observation = env.observe(agent)
 
-obsevation_analysis = {
-    "Agent": agent,
-    "Initial Observation Shape": np.shape(initial_observation),
-    "Initial Observation Sample": initial_observation[:5],
-    "New Observation Shape": np.shape(new_observation),
-    "New Observation Sample": new_observation[:5],
-}
+def format_observation(observation):
+    """Converts observation to an array of structured form"""
+    return pd.DataFrame(observation.reshape(1, -1), columns=[f"Feature_{i}" for i in range(len(observation))])
 
-obsevation_analysis
+print("Observation Analysis**")
+print(f"Agent: {agent}\n")
+print("Initial Observation")
+print(format_observation(initial_observation))
+print("New Observation (After action)")
+print(format_observation(new_observation))
