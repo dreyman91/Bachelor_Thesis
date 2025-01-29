@@ -1,0 +1,12 @@
+  def set_product_price(self, vendor, product, quantity, auto_restock):
+        """Sets price"""
+        if vendor in self.vendors_products and product in self.vendors_products[vendor]:
+            product.update_stock(quantity)
+            print(f"{vendor} updated stock for {product.name}. New Stock: {product.stock}")
+
+            if auto_restock and product.stock < 3:
+                total_cost = 5 * cost_per_unit
+                if self.vendor_revenue[vendor] >= total_cost:
+                    product.update_stock(5)
+                    self.vendor_revenue[vendor] -= total_cost
+                    print(f"{vendor} restocked {product.name} with 5 units. New Stock: {product.stock}")
