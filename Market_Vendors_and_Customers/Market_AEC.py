@@ -54,14 +54,10 @@ class Market_AEC_Env(AECEnv):
                       [f'vendor_{i}' for i in range(vendors)] + \
                       [f'admin_{i}' for i in range(admin)]
         self.possible_agents = self.agents[:]
-        self.agent_selection = self.agents[0] # First agent starts the run
         self.agent_index = 0
-
-        ########### TRACKING CUSTOMER BUDGET AND VENDOR PRODUCTS ##########
-        ## 1. CUSTOMER
+        self.agent_selection = self.agents[self.agent_index]  # First agent starts the run
         self.customer_budgets = {f'customer_{i}': np.random.randint(50, 2000) for i in range(customers)}
 
-        ##2. VENDORS
         self.vendors_products = {f'vendor_{i}': [
             Product(product_id=1, price=np.random.randint(500, 1000), name="Iphone", category="Electronics", stock=20),
             Product(product_id=2, price=np.random.randint(10,30), name="Apple", category="Fruit", stock=100),
@@ -88,7 +84,7 @@ class Market_AEC_Env(AECEnv):
 
         admin_actions = {
             0: "enforce_policies",
-            1: "fine_vendors",
+            1: "fine",
             2: "monitor_market",
 
         }
@@ -187,11 +183,11 @@ class Market_AEC_Env(AECEnv):
 
         if "admin" in agent:
             if action == 0:
-                self.impose_price_control()
+                self.enforce_policies()
             elif action == 1:
-                self.fine_vendors()
+                self.fine()
             elif action == 2:
-                self.adjust_market_trends()
+                self.monitor_market()
 
         self.assign_rewards(agent, action)
 
@@ -202,24 +198,38 @@ class Market_AEC_Env(AECEnv):
             self.agents = []
 
     #########  REWARD FUNCTION ############
+    def select_vendor(self, customer):
+        vendors_list = [v for v in self.vendors_products if self.vendors_products[v]]
+        return np.random.choice(vendors_list) if vendors_list else None
+
+    def select_product(self, vendor):
+        if vendor and vendor in self.vendors_products and self.vendors_products[vendor]:
+            return np.random.choice(self.vendors_products[vendor])
+        return None
+
     def assign_rewards(self, agent, action):
         """Assign rewards based on agents action and market dynamics"""
+        if action is None:
+            return
+
         if "customer" in agent:
-            if action == 1:
-                vendor = self.select_vendor(agent)
-                product = self.select_product(vendor)
-                if product and self.customer_budgets[agent] >= product.price:
-                    self.customer_budgets[agent] -= product.price
-                    self.vendor_revenue[vendor] += product.price
-                    self.rewards[agent] += 10
-                    self.rewards[vendor] += 15
-                else:
-                    self.rewards[agent] -= 5 #Penalty for not buying
+
+            vendor = self.select_vendor(agent)
+            if not vendor:
+                self.rewards[agent] -= 5
+                return
+            product = self.select_product(vendor)
+
+            if vendor and product and self.customer_budgets[agent] >= product.price:
+                self.rewards[agent] += 10
+                self.rewards[vendor] += 15
+            else:
+                self.rewards[agent] -= 5 #Penalty for not buying
 
         elif "vendor" in agent:
             if action == 0: #Adjust price
                 product = self.select_product(agent)
-                if product.price > self.average_market_price * 2:
+                if product and product.price > self.average_market_price * 2:
                     self.rewards[agent] -= 10
                 else:
                     self.rewards[agent] += 5
@@ -322,6 +332,12 @@ class Market_AEC_Env(AECEnv):
 
                 self.adjust_prices(vendor)
                 self.update_status(vendor)
+
+                customer_action = self.current_actions.get(customer, None)
+                vendor_action = self.current_actions.get(vendor, None)
+                self.assign_rewards(customer, customer_action)
+                self.assign_rewards(vendor, vendor_action)
+
             else:
                 print(f"{customer} does have enough budget to purchase the {product}")
 
