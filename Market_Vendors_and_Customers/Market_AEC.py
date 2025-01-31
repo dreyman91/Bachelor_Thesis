@@ -434,18 +434,18 @@ class Market_AEC_Env(AECEnv):
     def update_status(self, vendor):
         """Update vendor's status"""
         if vendor not in self.vendors_status:
-            vendor_products = self.vendors_products[vendor]
-        if not vendor_products:
-            print("{vendor} does not exist" )
+            print(f"{vendor} not in the the market")
             return
+
         vendor_products = self.vendors_products.get(vendor, [])
 
         if not vendor_products:
             self.vendors_status[vendor] = "inactive"
-        elif len(self.market_price_history[vendor]) > 5 and sum(self.market_price_history[vendor][-5:]) == 0:
-            self.vendors_status[vendor] = "inactive"
-        else:
-            self.vendors_status[vendor] = "active"
+        elif  vendor in self.market_price_history and len(self.market_price_history[vendor]) > 5:
+            if sum(self.market_price_history[vendor][-5:]) == 0:
+                self.vendors_status[vendor] = "inactive"
+            else:
+                self.vendors_status[vendor] = "active"
 
         print(f"{vendor} status: {self.vendors_status[vendor]}")
 
