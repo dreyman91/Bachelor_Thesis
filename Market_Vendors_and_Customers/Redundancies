@@ -10,3 +10,30 @@
                     product.update_stock(5)
                     self.vendor_revenue[vendor] -= total_cost
                     print(f"{vendor} restocked {product.name} with 5 units. New Stock: {product.stock}")
+
+
+
+
+      admin_actions = {
+            0: "enforce_policies",
+            1: "fine",
+            2: "monitor_market",
+
+        }
+        #Vendor Action Space
+        vendor_action_space = {
+            0: "adjust_price",
+            1: "add_product",
+            2: "remove_product",
+            3: "update_stock"
+        }
+
+        #Customer Action Space
+        customer_action_space = {
+            0: "browse_products",
+            1: "purchase_products",
+            2: "negotiate_products",
+            3: "wait",
+            4: "check_market_trends",
+            5: "set_purchase_priority"
+        }
