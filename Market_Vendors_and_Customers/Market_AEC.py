@@ -60,6 +60,7 @@ class Market_AEC_Env(AECEnv):
         self.possible_agents = self.agents[:]
         self.agent_index = 0
         self.agent_selection = self.agents[self.agent_index]  # First agent starts the run
+        self.step_count = 0
 
         self.customer_budgets = {f'customer_{i}': np.random.randint(50, 2000) for i in range(customers)}
 
@@ -134,6 +135,7 @@ class Market_AEC_Env(AECEnv):
         self.done_agents = set()
         self.agent_index = 0
         self.agent_selection = self.agents[self.agent_index]
+        self.step_count = 0
 
         self.vendors_products = {f"vendor_{i}": [
             Product(product_id=1, price=np.random.randint(500, 1000), name="Iphone", category="Electronics", stock=20),
@@ -187,12 +189,19 @@ class Market_AEC_Env(AECEnv):
                 self.update_product_stock(agent)
 
         self.assign_rewards(agent, action)
+        self.step_count +=1
 
         self.agent_index = (self.agents.index(agent) + 1) % len(self.agents)
         self.agent_selection = self.agents[self.agent_index]
 
-        if self.check_done():
-            self.agents = []
+        terminations = self.terminations()
+        truncations = self.truncations()
+        info = {}
+
+        obs = self.observe(agent)
+        reward = self.rewards.get(agent, 0)
+
+        return obs, reward, terminations,truncations, info
 
 ########### OBSERVATION  ##########
     def observe(self, agent):
@@ -288,19 +297,24 @@ class Market_AEC_Env(AECEnv):
         done_customers = {customer for customer in self.customer_budgets if self.customer_budgets[customer] <= 0}
         done_vendors = {vendor for vendor in self.vendors_products if not self.vendors_products[vendor]}
 
-        if len(done_customers) == len(self.customer_budgets) or len(done_vendors) == len(self.vendors_products):
-            self.agents = []
+        print(f"[DEBUG] Done Customers: {done_customers} | Done Vendors: {done_vendors}")
+
+        is_done = len(done_customers) == len(self.customer_budgets) or len(done_vendors) == len(self.vendors_products)
+
+        if is_done:
+            print(f"[DEBUG] All agents are done. Terminating environment.")
+            self.done_agents.update(done_customers | done_vendors)
             return True
         return False
 
    ########## Terminations ############
-    def terminations(selfs):
-        return all(agent in self.done_agents for agent in self.agents)
+    def terminations(self):
+        return self.check_done
 
     ########## Truncations ################
     def truncations(self):
         max_steps = 100
-        return self.agent_index >= max_steps
+        return self.step_count >= max_steps
 
 
     def monitor_market(self):
