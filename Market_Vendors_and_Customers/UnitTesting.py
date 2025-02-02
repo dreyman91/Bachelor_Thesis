@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from Market_Vendors_and_Customers.Market_AEC import Market_AEC_Env, Product
+from Market_Vendors_and_Customers.market_aec import Market_AEC_Env, Product
 
 class Market_Vendors_and_Customers_and_UnitTesting(unittest.TestCase):
     def setUp(self):
