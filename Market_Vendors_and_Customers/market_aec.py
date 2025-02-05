@@ -7,7 +7,7 @@ for simulating a market with customers, vendors, and administrators.
 Author: Oluwadamilare Adegun
 Date: 10.01.2025.
 """
-
+from operator import index
 from platform import processor
 from pettingzoo.utils import agent_selector
 from pettingzoo import AECEnv
@@ -55,38 +55,36 @@ class MarketAECEnv(AECEnv):
     """
 
     metadata = {
-        "render_modes": [
-            "human",
-            "rgb_array"],
-        "name": "market_aec_v0"}
+        "render_modes": ["human","rgb_array"],"name": "market_aec_v0"}
 
     ########### INITIALIZATION ##########
-    def __init__(self, vendors=3, customers=3, render_mode="human", admin=1):
+    def __init__(self, vendors=3, customers=3, render_mode="human"):
         """"Initialization"""
         super().__init__()
-        self.customers = customers
         self.vendors = vendors
-        self.admin = admin
+        self.customers = customers
         self.render_mode = render_mode
-        self.penalty = 5
+        self.market_trend = 0
+        self.total_transactions = 0
+        self.step_count = 0
+        self.done_agents = set()
+        self.action_spaces = {}
 
         ####### AGENTS ########
         self.agents = (
             [f"customer_{i}" for i in range(customers)]
             + [f"vendor_{i}" for i in range(vendors)]
-            + [f"admin_{i}" for i in range(admin)]
         )
-        self.market_trend = 0
-        self.total_transactions = 0
+
         self.possible_agents = self.agents[:]
         self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.reset()
-        self.step_count = 0
 
+        ####### CUSTOMER ATTRIBUTES ########
         self.customer_budgets = {
             f"customer_{i}": np.random.randint(50, 2000) for i in range(customers)
         }
-
+        ####### VENDOR ATTRIBUTES ########
         self.vendors_products = {
             f"vendor_{i}": [
                 Product(
@@ -113,86 +111,48 @@ class MarketAECEnv(AECEnv):
             ]
             for i in range(vendors)
         }
-
-        # Market Attributes
         self.vendor_revenue = {f"vendor_{i}": 0 for i in range(self.vendors)}
+        self.vendors_status = {f"vendor_{i}": "active" for i in range(self.vendors)}
+
+        ############# MARKET ATTRIBUTES ############
+        self.market_prices = {f"vendor_{i}": np.random.randint(10, 50) for i in range(self.vendors)}
+        self.market_price_history = {f"vendor_{i}": [] for i in range(self.vendors)}
+
+        ############ MARKET REGULATIONS ######################
         self.rewards = {agent: 0 for agent in self.agents}
-        self.violations = {}
-        self.vendor_penalties = {}
+        self.current_actions = {agent: None for agent in self.agents}
         self.max_price_factor = 1.5
         self.penalty_steps = 3
 
-        self.market_prices = {
-            f"vendor_{i}": np.random.randint(10, 50) for i in range(self.vendors)
-        }
-        self.market_price_history = {f"vendor_{i}": []
-                                     for i in range(self.vendors)}
-        self.current_actions = {agent: None for agent in self.agents}
-        self.done_agents = set()
-        self.vendors_status = {
-            f"vendor_{i}": "active" for i in range(
-                self.vendors)}
 
         # Action and Observation Spaces
-        self.action_spaces = {
-            agent: spaces.Discrete(
-                6) if "customer" in agent else spaces.Discrete(4)
-            for agent in self.agents
-        }
-        self.action_spaces["admin"] = spaces.Discrete(3)
-
-        ########### OBSERVATIONs ##########
+        self.action_spaces["customers"] = spaces.Discrete(2)
+        self.action_spaces["vendors"] = spaces.Discrete(4)
         self.observation_spaces = self._define_observation_spaces()
 
     def _define_observation_spaces(self):
         observation_spaces = {}
         for agent in self.agents:
-            if "admin" in agent:
-                observation_spaces[agent] = spaces.Dict(
-                    {
-                        "market_trends": spaces.Box(
-                            low=-1, high=1, shape=(1,), dtype=np.float32
-                        ),
-                        "vendor_status": spaces.MultiBinary(self.vendors),
-                        "price_distributions": spaces.Box(
-                            low=0, high=100, shape=(self.vendors,), dtype=np.float32
-                        ),
-                        "total_transactions": spaces.Box(
-                            low=0, high=100, shape=(1,), dtype=np.int32
-                        ),
-                        "violations_detected": spaces.Discrete(10),
-                    }
-                )
-            elif "customer" in agent:
+            if "customer" in agent:
 
                 observation_spaces[agent] = spaces.Dict(
                     {
-                        "vendors": spaces.MultiBinary(self.vendors),
-                        "prices": spaces.Box(
-                            low=0, high=100, shape=(self.vendors,), dtype=np.float32
-                        ),
+                        "vendors": spaces.MultiBinary(self.vendors),"prices": spaces.Box(
+                        low=0, high=100, shape=(self.vendors,), dtype=np.float32),
                         "stock": spaces.Box(
-                            low=0, high=100, shape=(self.vendors,), dtype=np.int32
-                        ),
+                            low=0, high=100, shape=(self.vendors,), dtype=np.int32),
                         "market_trend": spaces.Discrete(3),
-                        "budget": spaces.Box(
-                            low=0, high=100, shape=(1,), dtype=np.float32
-                        ),
+                        "budget": spaces.Box(low=0, high=100, shape=(1,), dtype=np.float32),
                     }
                 )
             elif "vendor" in agent:
                 observation_spaces[agent] = spaces.Dict(
                     {
                         "competitor_prices": spaces.Box(
-                            low=0, high=100, shape=(self.vendors,), dtype=np.float32
-                        ),
-                        "own_stock": spaces.Box(
-                            low=0, high=100, shape=(1,), dtype=np.int32
-                        ),
+                            low=0, high=100, shape=(self.vendors,), dtype=np.float32),
+                        "own_stock": spaces.Box(low=0, high=100, shape=(1,), dtype=np.int32),
                         "market_demand": spaces.Discrete(3),
-                        "sales_history": spaces.Box(
-                            low=0, high=100, shape=(5,), dtype=np.float32
-                        ),
+                        "sales_history": spaces.Box(low=0, high=100, shape=(5,), dtype=np.float32),
                         "status": spaces.MultiBinary(1),
                     }
                 )
@@ -201,7 +161,7 @@ class MarketAECEnv(AECEnv):
 
     ########### RESET  ##########
     def reset(self, seed=None, options=None):
-
+        """ Resets the environment for new epsiode"""
         if seed is not None:
             np.random.seed(seed)
 
@@ -213,21 +173,18 @@ class MarketAECEnv(AECEnv):
             for product in products:
                 product.stock = np.random.randint(5, 100)
 
+        # Reset market attributes
+        self.market_prices = {f"vendor_{i}": np.random.randint(10, 50) for i in range(self.vendors)}
+        self.market_price_history = {f"vendor_{i}": [] for i in range(self.vendors)}
+        self.vendors_status = {f"vendor_{i}": "active" for i in range(self.vendors)}
+
+        # Reset agent-specific market variables
         self.rewards = {agent: 0 for agent in self.agents}
-
-        self.market_prices = {
-            f"vendor_{i}": np.random.randint(10, 50) for i in range(self.vendors)
-        }
-        self.market_price_history = {f"vendor_{i}": []
-                                     for i in range(self.vendors)}
-        self.vendors_status = {
-            f"vendor_{i}": "active" for i in range(
-                self.vendors)}
         self.current_actions = {agent: None for agent in self.agents}
-
         return {agent: self.observe(agent) for agent in self.agents}, {}
 
-        ########### Step  ##########
+
+        ########### STEP  ##########
 
     def step(self, action):
         """Agent takes action based on observation"""
@@ -235,18 +192,12 @@ class MarketAECEnv(AECEnv):
             raise RuntimeError("Agent is not available")
         if action is None:
             return None
+
+        # Select current agent
         agent = self.agent_selection
         self.current_actions[agent] = action
 
-        if "admin" in agent:
-            if action == 0:
-                self.enforce_policies()
-            elif action == 1:
-                self.fine()
-            elif action == 2:
-                self.monitor_market()
-
-        elif "customer" in agent:
+        if "customer" in agent:
             if action == 0:  # Purchase
                 vendor = self.select_vendor(agent)
                 product = self.select_product(agent)
@@ -262,33 +213,38 @@ class MarketAECEnv(AECEnv):
                         self.rewards[agent] -= 3
                     else:
                         self.purchase(agent, vendor, product)
-            elif action == 1:
+
+            elif action == 1: # browsing market
                 best_vendor = min(
                     self.vendors_products,
-                    key=lambda v: np.mean(
-                        [p.price for p in self.vendors_products[v]]),
+                    key=lambda v: np.mean([p.price for p in self.vendors_products[v]]),
                 )
                 print(f"{agent} is comparing vendors and prefers {best_vendor}")
                 self.rewards[agent] += 2
-            elif action == 2:
-                print(f"{agent} is waiting for discount")
-                self.rewards[agent] += 1
+
+            elif action == 2: # Negotiate
+                vendor = self.select_vendor(agent)
+                product = self.select_product(agent)
+                if vendor and product:
+                    self.negotiate(agent, product)
 
         elif "vendor" in agent:
             if action == 0:
-                demand_trend
                 self.adjust_prices(agent)
             elif action == 1:
                 self.update_product_stock(agent)
 
+        # Update environment
         self.assign_rewards(agent, action)
         self.step_count += 1
 
+        # Handle agent turns
         if self.check_done():
             self.done_agents.add(agent)
         while self.agent_selection in self.done_agents:
             self.agent_selection = self._agent_selector.next()
 
+        # Return updated state
         terminations = self.terminations()
         truncations = self.truncations()
         info = {}
@@ -303,98 +259,52 @@ class MarketAECEnv(AECEnv):
         """Structured observation for customers"""
         if agent not in self.agents:
             return {}
-
-        if "admin" in agent:
-            return {
-                "market_trends": self.market_trend,
-                "vendors_status": np.array(
-                    [
-                        1 if self.vendors_status[v] == "active" else 0
-                        for v in self.vendors_status
-                    ]
-                ),
-                "price_distributions": np.array(
-                    [
-                        (
-                            np.mean([p.price for p in self.vendors_products[v]])
-                            if self.vendors_products[v]
-                            else 0
-                        )
-                        for v in self.vendors_products
-                    ],
-                    dtype=np.float32,
-                ),
-                "total_transactions": np.array(
-                    [self.total_transactions], dtype=np.int32
-                ),
-                "violations_detected": sum(self.violations.values()),
-            }
-
         if "customer" in agent:
             return {
-                "vendors": np.array(
-                    [
+                "vendors": np.array([
                         1 if self.vendors_products[v] else 0
-                        for v in self.vendors_products
-                    ]
+                        for v in self.vendors_products]
                 ),
-                "prices": np.array(
-                    [
-                        (
+                "prices": np.array([(
                             np.mean([p.price for p in self.vendors_products[v]])
                             if self.vendors_products[v]
-                            else 0
-                        )
-                        for v in self.vendors_products
-                    ],
+                            else 0)
+                        for v in self.vendors_products],
                     dtype=np.float32,
                 ),
-                "stock": np.array(
-                    [
-                        (
+                "stock": np.array([(
                             sum(p.stock for p in self.vendors_products[v])
                             if self.vendors_products[v]
-                            else 0
-                        )
-                        for v in self.vendors_products
-                    ],
+                            else 0)
+                        for v in self.vendors_products],
                     dtype=np.int32,
                 ),
                 "market_trend": self.market_trend,
-                "budget": np.array(
-                    [self.customer_budgets.get(agent, 0)], dtype=np.float32
-                ),
+                "budget": np.array([self.customer_budgets.get(agent, 0)], dtype=np.float32),
             }
         elif "vendor" in agent:
             return {
-                "competitor_prices": np.array(
-                    [
-                        (
+                "competitor_prices": np.array([(
                             np.mean([p.price for p in self.vendors_products[v]])
                             if self.vendors_products[v]
-                            else 0
-                        )
+                            else 0)
                         for v in self.vendors_products
-                        if v != agent
-                    ],
+                        if v != agent],
                     dtype=np.float32,
                 ),
                 "own_stock": np.array(
                     [sum(p.stock for p in self.vendors_products[agent])], dtype=np.int32
                 ),
                 "market_demand": self.market_trend,
-                "sales_history": np.array(
-                    (
+                "sales_history": np.array((
                         self.market_price_history[agent][-5:]
                         if len(self.market_price_history[agent]) >= 5
-                        else self.market_price_history[agent]
-                        + [0] * (5 - len(self.market_price_history[agent]))
-                    ),
+                        else self.market_price_history[agent] + [0] * (5 - len(self.market_price_history[agent]))),
                     dtype=np.float32,
                 ),
                 "status": 1 if self.vendors_status[agent] == "active" else 0,
             }
-        return None
+        return {}
 
     #########  REWARD FUNCTION ############
     def select_vendor(self, customer):
@@ -406,62 +316,6 @@ class MarketAECEnv(AECEnv):
         if vendor and vendor in self.vendors_products and self.vendors_products[vendor]:
             return np.random.choice(self.vendors_products[vendor])
         return None
-
-    def assign_rewards(self, agent, action):
-        """Assign rewards based on agents action and market dynamics"""
-        if agent not in self.rewards:
-            self.rewards[agent] = 0
-
-        if "customer" in agent:
-            if action == 1:
-                vendor = self.select_vendor(agent)
-                product = self.select_product(agent)
-                if vendor and product and self.customer_budgets[agent] >= product.price:
-                    self.rewards[agent] += 10
-                    self.rewards[vendor] += 15
-                elif vendor and product:
-                    self.rewards[agent] -= 5
-
-        elif "vendor" in agent:
-            if action == 0:  # Adjust price
-                product = self.select_product(agent)
-                if product and product.price > self.average_market_price * 2:
-                    self.rewards[agent] -= 10
-                else:
-                    self.rewards[agent] += 5
-
-        elif "admin" in agent:
-            if action == 2:  # Monitor market
-                if self.active_vendors >= self.vendors * 0.7:
-                    self.rewards[agent] += 10
-                else:
-                    self.rewards[agent] -= 10
-
-    def check_done(self):
-        done_customers = {
-            customer
-            for customer in self.customer_budgets
-            if self.customer_budgets[customer] <= 0
-        }
-        done_vendors = {
-            vendor
-            for vendor in self.vendors_products
-            if not self.vendors_products[vendor]
-        }
-
-        print(
-            f"[DEBUG] Done Customers: {done_customers} | Done Vendors: {done_vendors}"
-        )
-
-        is_done = len(done_customers) == len(self.customer_budgets) or len(
-            done_vendors
-        ) == len(self.vendors_products)
-
-        if is_done:
-            print(f"[DEBUG] All agents are done. Terminating environment.")
-            self.done_agents.update(done_customers | done_vendors)
-            return True
-        return False
 
     ########## Terminations ############
     def terminations(self):
@@ -516,29 +370,6 @@ class MarketAECEnv(AECEnv):
             "average_market_price": self.average_market_price,
         }
 
-    def fine(self):
-        for vendor, products in self.vendors_products.items():
-            for product in products:
-                avg_market_price = np.mean(self.market_prices)
-                price_threshold = avg_market_price * self.max_price_factor
-
-                if product.price > price_threshold:
-                    self.violations[vendor] = self.violations.get(
-                        vendor, 0) + 1
-                    self.vendor_penalties[vendor] = self.penalty
-                    self.vendors_status[vendor] = self.penalty
-                    print(
-                        f"Admin penalized Vendor: {vendor}) for price gouging on {product}"
-                    )
-
-    def update_vendor_status(self):
-        """Reduce penalized vendor for 3 steps"""
-        for vendor in self.vendor_penalties:
-            if self.vendor_penalties[vendor] > 0:
-                self.vendor_penalties[vendor] -= 1
-                if self.vendor_penalties[vendor] == 0:
-                    self.vendors_status[vendor] = "active"
-                    print(f"{vendor} is active again after penalty")
 
     def enforce_policies(self):
         """Apply regulatory actions based on market conditions"""
@@ -549,74 +380,37 @@ class MarketAECEnv(AECEnv):
 
     def purchase(self, customer, vendor, product):
         """Customer purchases the product"""
-        if (
-            vendor in self.vendors_products and product in self.vendors_products[vendor]
-        ):  # Checks if vendor has a product
-            if self.customer_budgets[customer] >= product.price:
-                if not product in self.vendors_products[vendor]:
-                    return
-                index = self.vendors_products[vendor].index(product)
 
-                self.customer_budgets[customer] -= product.price
-                self.vendor_revenue[vendor] += product.price
+        final_price = self.negotiate(vendor, customer, product)
 
-                if self.vendors_products[vendor][index].stock > 1:
-                    self.vendors_products[vendor][index].update_stock(-1)
-                else:
-                    self.vendors_products[vendor].pop(index)
-                print(f"{customer} purchased {product} from {vendor}")
+        if final_price is None: #Negotiation fails
+            print(f"{customer} cannot afford {product}")
+            self.rewards[customer] -= 5
+            self.rewards[vendor] += 1
+            return
 
-                self.adjust_prices(vendor)
-                self.update_status(vendor)
 
-                customer_action = self.current_actions.get(customer, None)
-                vendor_action = self.current_actions.get(vendor, None)
-                self.assign_rewards(customer, customer_action)
-                self.assign_rewards(vendor, vendor_action)
+        if self.customer_budgets[customer] >= final_price:
+            self.customer_budgets[customer] -= final_price
+            self.vendor_revenue[vendor] += final_price
 
+            index = self.vendors_products[vendor].index(product)
+            if self.vendors_products[vendor][index].stock > 1:
+                self.vendors_products[vendor][index].update_stock(-1)
             else:
-                print(
-                    f"{customer} does not have enough budget to purchase the {product}"
-                )
+                self.vendors_products[vendor].pop(index)
+            print(f"{customer} successfully purchased {product} on {vendor}")
+            self.rewards[customer] += 5
+            self.rewards[vendor] += 5
+
+            self.adjust_prices(vendor)
+            self.update_status(vendor)
 
     def check_market_trend(self, customer):
         """Customer observes market price"""
         obs = self.observe(customer)
         print(f"{customer} observes market trends: {obs['market_trend']}")
 
-    def browse_products(self, customer):
-        """Customer browses products"""
-        obs = self.observe(customer)
-        print(f"{customer} is browsing products: {obs['vendors']}")
-
-    def add_product(self, vendor, product):
-        """Adds a product to the market prices"""
-        if vendor in self.vendors_products:
-            existing_product = next(
-                (p for p in self.vendors_products[vendor]
-                 if p.name == product.name),
-                None,
-            )
-            if existing_product:
-                existing_product.update_stock(product.stock)
-            else:
-
-                self.vendors_products[vendor].append(product)
-                self.update_status(vendor)
-        else:
-            raise ValueError(f"Vendor {vendor} does not exist")
-
-    def remove_product(self, vendor, product):
-        """Removes a product from the market prices"""
-        if not self.vendors_products[vendor]:
-            self.vendors_status[vendor] = "inactive"
-
-        elif (
-            vendor in self.vendors_products and product in self.vendors_products[vendor]
-        ):
-            self.vendors_products[vendor].remove(product)
-            print(f"{vendor} sold {product}")
-            self.update_status(vendor)
 
     def update_product_stock(self, vendor, product, quantity):
         """Updates stock"""
@@ -665,61 +459,104 @@ class MarketAECEnv(AECEnv):
 
     def adjust_prices(self, vendor):
         """Adjust vendor prices based on market trends, stock levels, and competitor presence"""
-        if vendor in self.vendors_products:
-            trend = self.analyze_market_trends(vendor)
-            vendor_products = self.vendors_products[vendor]
-            if vendor not in self.market_price_history:
-                self.market_price_history[vendor] = []
 
-            for product in vendor_products:
-                competitor_prices = [
-                    p.price
-                    for v, products in self.vendors_products.items()
-                    if v != vendor
-                    for p in products
-                    if p.name == product.name
-                ]
-                avg_competitor_price = (
-                    np.mean(
-                        competitor_prices) if competitor_prices else product.price
-                )
-                if np.isnan(avg_competitor_price):
-                    avg_competitor_price = product.price
+        # Check if vendor exists
+        if vendor not in self.vendors_products:
+            return
 
-                # Stock based
+        trend = self.analyze_market_trends(vendor) # Market trend
+        vendor_products = self.vendors_products[vendor]
 
-                if product.stock < 5:
-                    product.set_price(
-                        product.price *
-                        1.2)  # increase price by 20%
-                    print(
-                        f"{vendor} increased {product.name}'s price to {product.price}"
-                    )
-                elif product.stock > 20:
-                    product.set_price(
-                        product.price *
-                        0.9)  # decrease price by 10%
+        #Validate vendor price history
+        if vendor not in self.market_price_history:
+            self.market_price_history[vendor] = []
 
-                # Trend based
-                if trend == "increasing":
-                    product.set_price(product.price * 1.05)
-                elif trend == "decreasing":
-                    product.set_price(product.price * 0.95)
+        for product in vendor_products:
 
-                # Stay competitive
-                if competitor_prices:
-                    product.set_price(
-                        (product.price + avg_competitor_price) / 2)
+            # Competitor prices
+            competitor_prices = [
+                p.price
+                for v, products in self.vendors_products.items()
+                if v != vendor
+                for p in products
+                if p.name == product.name
+            ]
+            avg_competitor_price = (
+                np.mean(
+                    competitor_prices) if competitor_prices else product.price
+            )
+            if np.isnan(avg_competitor_price):
+                avg_competitor_price = product.price
 
-                if 49 <= product.price <= 51:
-                    product.set_price(product.price * 1.1)
+            if avg_competitor_price <= product.price * 0.9:
+                pass
+            elif avg_competitor_price > product.price * 1.2:
+                product.set_price(product.price * 0.8) # Reduce price by 20%
+                self.rewards[vendor] += 10
 
-                print(f"{vendor} adjusted {product.name}'s price to {product.price}")
+
+            # Stock based
+
+            if product.stock < 5 and trend == "increasing":
+                product.set_price(product.price * 1.2)  # increase price by 20%
+                self.rewards[vendor] += 3
+            elif product.stock > 20 and trend == "increasing":
+                product.set_price( product.price * 0.9)  # decrease price by 10%
+                self.rewards[vendor] += 1
+            elif product.stock > 20 and trend == "decreasing":
+                product.set_price( product.price * 0.7) # decrease prcie by 30%
+                self.rewards[vendor] += 0
+
+          # Threshold
+        min_price = product.price * 0.65
+        if product.price < min_price:
+            self.rewards[vendor] -= 10
+            product.set_price(min_price)
 
         # Vendor Adjust market
         self.market_price_history[vendor].append(self.market_prices[vendor])
         if len(self.market_price_history[vendor]) > 10:
             self.market_price_history[vendor].pop(0)
+
+    def negotiate(self, vendor, customer, product):
+        """Negotiation between Customers and Vendors"""
+        if vendor not in self.market_price_history: #Check for vendors
+            self.market_price_history[vendor] = [0]
+        # vendor_sales = sum(self.market_price_history[vendor])
+        # print(f"{vendor} sales history: {vendor_sales}")
+        # return  vendor_sales
+
+        demand_trend = self.market_trend # -1(low), 0 (stable), 1(high)
+        vendor_sales = sum(self.market_price_history[vendor])
+        customer_budget = self.customer_budgets[customer]
+
+        original_price = product.price
+        final_price = original_price
+        discount_applied = False
+
+        # RULES
+        if demand_trend == 1 and  customer_budget < original_price: # High demand; No discount
+            final_price = original_price
+            self.rewards[vendor] += 5
+            self.rewards[customer] -= 3
+
+        elif demand_trend == -1 or vendor_sales < 5 :
+            final_price = original_price * 0.85 # 15% discount
+            discount_applied = True
+            self.rewards[vendor] -= 2
+            if customer_budget >= final_price:
+                self.rewards[customer] += 3
+            else:
+                self.rewards[customer] -= 2
+
+        else:
+            final_price = original_price
+            self.rewards[vendor] += 2
+            if customer_budget >= final_price:
+                self.rewards[customer] += 3
+            else:
+                self.rewards[customer] += 1
+        return final_price
 
     #########  RENDER ############
     def render(self, mode="human"):
@@ -736,4 +573,3 @@ class MarketAECEnv(AECEnv):
         print("Market environment closed.")
 
 
-env = wrappers.CaptureStdoutWrapper(MarketAECEnv())
