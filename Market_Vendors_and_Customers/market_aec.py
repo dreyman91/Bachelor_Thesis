@@ -83,7 +83,6 @@ class MarketAECEnv(AECEnv):
             [f"customer_{i}" for i in range(customers)]
             + [f"vendor_{i}" for i in range(vendors)]
         )
-
         self.possible_agents = self.agents[:]
         self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.reset()
@@ -202,14 +201,21 @@ class MarketAECEnv(AECEnv):
 
         self.done_agents = set()
         self.step_count = 0
-        self.possible_agents = self.agents[:]
-        self.agent_selection = self._agent_selector.reset()
-        self.terminations = {agent: False for agent in self.possible_agents}
-        self.truncations = {agent: False for agent in self.possible_agents}
+
         self.agents = [f"customer_{i}" for i in range(np.random.randint(1,3))]
         self.agents += [f"vendor_{i}" for i in range(np.random.randint(1,3))]
 
-        self.infos = {agent: {} for agent in self.agents}
+        self.possible_agents = self.agents[:]
+
+        self._agent_selector = agent_selector(self.agents)
+        self.agent_selection = self._agent_selector.reset()
+
+        self.infos = {agent: {} for agent in self.possible_agents}
+
+
+
+        self.terminations = {agent: False for agent in self.possible_agents}
+        self.truncations = {agent: False for agent in self.possible_agents}
         # Reset agent-specific market variables
         self.rewards = {agent: 0 for agent in self.agents}
         self.current_actions = {agent: None for agent in self.agents}
@@ -235,6 +241,9 @@ class MarketAECEnv(AECEnv):
             raise RuntimeError("Agent is not available")
         if action is None:
             return None
+
+        if self.agent_selection not in self.agents:
+            raise KeyError(f"Agent {self.agent_selection} is no longer active. Active agents: {self.agents}")
 
         # Select current agent
         agent = self.agent_selection
@@ -288,6 +297,8 @@ class MarketAECEnv(AECEnv):
         # Remove terminated agents from self.agents list
         self._remove_terminated_agents()
 
+        self.infos = {agent: {} for agent in self.agents}
+
         if self.agents:
             self.agent_selection = self._agent_selector.next()
         else:
@@ -297,7 +308,11 @@ class MarketAECEnv(AECEnv):
             if agent not in self.agents:
                 self.terminations[agent] = True
                 self.truncations[agent] = False
-        self.infos = {agent: {} for agent in self.agents}
+
+        if self.agent_selection not in self.agents:
+            print(
+                f"[ERROR] Invalid agent selection after removal: {self.agent_selection}. Active agents: {self.agents}")
+            raise KeyError(f"Agent {self.agent_selection} is no longer active.")
 
         obs = self.observe(agent)
         reward = self.rewards.get(agent, 0)
@@ -308,7 +323,7 @@ class MarketAECEnv(AECEnv):
         for agent in list(self.infos.keys()):
             if self.terminations.get(agent, False) or self.truncations.get(agent, False):
                 del self.infos[agent]
-
+        print(f"[DEBUG] self.infos before returning step(): {self.infos}")
         return obs, reward, self.terminations, self.truncations, self.infos
 
     ########### OBSERVATION  ##########
