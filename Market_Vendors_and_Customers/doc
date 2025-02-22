@@ -1,0 +1,46 @@
++Admin
+--------
+Actions:- 1. Enforce policies
+          2. Set fines (based on price, activeness)
+          3. Monitor Market (
+
+Customers
+---------
+
+Actions:- 1. Purchase
+          2. Browse Products
+          3. Negotiate
+          4. Walk Away
+
+Vendors
+-----
+
+Actions:- 1. Adjust Prices( based on market trend and,
+             demand and, competitor prices)
+          2. Update Stock ( based on inventory)
+          3. Sell ( Normal Price)
+          4. Negotiate ( Sell only for 10 % discount)
+
+
+Negotiate:- if demand is high, no discount; + reward - Vendors
+            if demand is low, apply discount; / reward - Vendors
+            if sales are low, apply discount; 0 reward - Vendors
+            low budget and no discount  -reward - Customers
+            low budget and discount; 0 reward - Customers
+            normal budget and discount; + reward - Customers
+
+Walk Away:- if price is too high, customer walks -
+            the logic is that, if the current price of a vendor
+             is 20% higher than the last price, customer walks
+             away, Admin takes note and fines Vendor for price gouging.
+
+           - if price is normal but customer budget is low,
+           customer walks and gets a minus reward  and vendor a plus reward-.
+
+Browse Products :- Customer browses through product. No reward
+
+Adjust Prices:- Customer adjust prices based on stock inventory and demand,
+                 also based on competitor prices.
+                 if competitor price is high; reduce price by 20%; +R
+                 if low, maintain original price: 0 reward
+                 if stock is low and demand is high, increase price +R

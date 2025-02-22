@@ -10,7 +10,7 @@ Date: 10.01.2025.
 from operator import index
 from platform import processor
 from pettingzoo.utils import agent_selector
-from pettingzoo import AECEnv
+from pettingzoo import ParallelEnv
 from pettingzoo.utils import wrappers
 import numpy as np
 import gymnasium
@@ -18,6 +18,8 @@ from gymnasium import spaces
 from decimal import Decimal, ROUND_HALF_UP
 
 from pettingzoo.utils.env import AgentID
+
+from Custom_API.AEC_API.AEC_Env_Sample import reward
 
 
 ########## PRODUCT CLASS ##########
@@ -53,7 +55,7 @@ class Product:
 
 
 ########## MARKET CLASS ##########
-class MarketAECEnv(AECEnv):
+class MarketAECEnv(ParallelEnv):
     """
     A multi-agent environment for Market vendors and Customers.
     """
@@ -61,8 +63,20 @@ class MarketAECEnv(AECEnv):
     @staticmethod
     def round_price(value):
         return float(Decimal(value).quantize(Decimal("1.00"), rounding=ROUND_HALF_UP))
+
+    def format_agent_name(self, role: str, index: int):
+        """
+        Generates a standardized agent name.
+        role: customer or vendor
+        index: AgentID
+        """
+        if role not in ["customer", "vendor"]:
+            raise ValueError(f"Role {role} is not supported. Must be customer or vendor.")
+        return f"{role}_{index}"
     metadata = {
         "render_modes": ["human","rgb_array"],"name": "market_aec_v0"}
+
+
 
     ########### INITIALIZATION ##########
     def __init__(self, vendors=3, customers=3, render_mode="human"):
@@ -74,31 +88,35 @@ class MarketAECEnv(AECEnv):
         self.market_trend = 0
         self.total_transactions = 0
         self.step_count = 0
-        self.done_agents = set()
         self.action_spaces = {}
         MAX_OBS_VALUE = 3000.0
 
         ####### AGENTS ########
-        self.agents = (
-            [f"customer_{i}" for i in range(customers)]
-            + [f"vendor_{i}" for i in range(vendors)]
-        )
+        self.agents = [self.format_agent_name(role, i) for role in ["customer", "vendor"]
+                       for i in range(customers if role == "customer" else vendors)]
         self.possible_agents = self.agents[:]
-        self._agent_selector = agent_selector(self.agents)
-        self.agent_selection = self._agent_selector.reset()
-        self.terminations = {agent: False for agent in self.possible_agents}
-        self.truncations = {agent: False for agent in self.possible_agents}
-        self._cumulative_rewards = {agent: 0 for agent in self.possible_agents}
+
+        self.terminations = {agent: False for agent in self.agents}
+        self.truncations = {agent: False for agent in self.agents}
+        self._cumulative_rewards = {agent: 0 for agent in self.agents}
+        self.rewards = {agent: 0 for agent in self.agents}
+        self.current_actions = {agent: None for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
+
+        # properly calling define_observation
+        if hasattr(self, "_define_observation_spaces"):
+            self.observation_spaces = self._define_observation_spaces
+        else:
+            raise AttributeError("[ERROR] Please define observation spaces.")
         self.observation_spaces = self._define_observation_spaces()
 
         ####### CUSTOMER ATTRIBUTES ########
         self.customer_budgets = {
-            f"customer_{i}": np.random.randint(50, 2000) for i in range(customers)
+            self.format_agent_name("customer", i): np.random.randint(50, 2000) for i in range(customers)
         }
         ####### VENDOR ATTRIBUTES ########
         self.vendors_products = {
-            f"vendor_{i}": [
+            self.format_agent_name("vendor", i): [
                 Product(
                     product_id=1,
                     price=np.random.randint(500, 1000),
@@ -123,75 +141,24 @@ class MarketAECEnv(AECEnv):
             ]
             for i in range(vendors)
         }
-        self.vendor_revenue = {f"vendor_{i}": 0 for i in range(self.vendors)}
-        self.vendors_status = {f"vendor_{i}": "active" for i in range(self.vendors)}
+        self.vendor_revenue = {self.format_agent_name("vendor", i): 0 for i in range(self.vendors)}
+        self.vendors_status = {self.format_agent_name("vendor", i): "active" for i in range(self.vendors)}
 
         ############# MARKET ATTRIBUTES ############
-        self.market_prices = {f"vendor_{i}": np.random.randint(10, 50) for i in range(self.vendors)}
-        self.market_price_history = {f"vendor_{i}": [] for i in range(self.vendors)}
-
-        ############ MARKET REGULATIONS ######################
-        self.rewards = {agent: 0 for agent in self.agents}
-        self.current_actions = {agent: None for agent in self.agents}
-        self.max_price_factor = 1.5
-        self.penalty_steps = 3
-
+        self.market_prices = {self.format_agent_name("vendor", i): np.random.randint(10, 50) for i in range(self.vendors)}
+        self.market_price_history = {self.format_agent_name("vendor", i): [] for i in range(self.vendors)}
 
         # Action and Observation Spaces
         self.action_spaces = {
-            f"customer_{i}": spaces.Discrete(2) for i in range(self.customers)}
-        self.action_spaces.update({
-            f"vendor_{i}": spaces.Discrete(4) for i in range(self.vendors)})
+            agent: spaces.Discrete(2) if "customer" in agent else spaces.Discrete(4) for agent in self.agents}
 
+        print("Action Spaces Dictionary:", self.action_spaces)
 
-    def action_space(self, agent):
-        """Return  action space for agents"""
-        return self.action_spaces[agent]
+    def seed(self, seed=None):
+        """"Ensures reproductibility by setting a random seed"""
+        if seed is not None:
+            np.random.seed(seed)
 
-    def observation_space(self, agent):
-        """Return observation space for agents"""
-        return self.observation_spaces[agent]
-
-    def _define_observation_spaces(self):
-        observation_spaces = {}
-        max_obs_size = 1 + self.vendors * 3 + 5
-
-        for agent in self.agents:
-            if "customer" in agent:
-                obs_space = spaces.Dict(
-                    {
-                        "vendors": spaces.MultiBinary(self.vendors),
-                        "prices": spaces.Box(low=0, high=100, shape=(self.vendors,), dtype=np.float32),
-                        "stock": spaces.Box(low=0, high=100, shape=(self.vendors,), dtype=np.int32),
-                        "market_trend": spaces.Discrete(3),
-                        "budget": spaces.Box(low=0, high=100, shape=(1,), dtype=np.float32),
-                    }
-                )
-            elif "vendor" in agent:
-                obs_space = spaces.Dict(
-                    {
-                        "competitor_prices": spaces.Box(low=0, high=100, shape=(self.vendors,), dtype=np.float32),
-                        "own_stock": spaces.Box(low=0, high=100, shape=(1,), dtype=np.int32),
-                        "market_demand": spaces.Discrete(3),
-                        "sales_history": spaces.Box(low=0, high=100, shape=(5,), dtype=np.float32),
-                        "status": spaces.MultiBinary(1),
-                    }
-                )
-            # store raw obs
-            observation_spaces[agent] = obs_space
-
-            # convert dict to a flat box space for pettingzoo
-        for agent in observation_spaces:
-            flattened_size = spaces.utils.flatten_space(observation_spaces[agent]).shape[0]
-            max_obs_size = max(max_obs_size, flattened_size)
-
-            observation_spaces[agent] = spaces.Box(
-                low=np.zeros(max_obs_size, dtype=np.float32),
-                high=np.full(max_obs_size, 10000, dtype=np.float32),
-                shape=(max_obs_size,), dtype=np.float32
-                )
-        self.max_obs_size = max_obs_size
-        return observation_spaces
 
     ########### RESET  ##########
     def reset(self, seed=None, options=None):
@@ -199,190 +166,292 @@ class MarketAECEnv(AECEnv):
         if seed is not None:
             np.random.seed(seed)
 
-        self.done_agents = set()
         self.step_count = 0
 
-        self.agents = [f"customer_{i}" for i in range(np.random.randint(1,3))]
-        self.agents += [f"vendor_{i}" for i in range(np.random.randint(1,3))]
+        self.agents = [self.format_agent_name("customer", i) for i in range(self.customers)]
+        self.agents += [self.format_agent_name("vendor", i) for i in range(self.vendors)]
 
-        self.possible_agents = self.agents[:]
-
-        self._agent_selector = agent_selector(self.agents)
-        self.agent_selection = self._agent_selector.reset()
-
-        self.infos = {agent: {} for agent in self.possible_agents}
-
-
-
+        self.possible_agents = self.agents[:] # Reset possible agents
+        # Reset dictionaries
+        self.infos = {agent: {} for agent in self.agents}
         self.terminations = {agent: False for agent in self.possible_agents}
         self.truncations = {agent: False for agent in self.possible_agents}
-        # Reset agent-specific market variables
         self.rewards = {agent: 0 for agent in self.agents}
+        self._cumulative_rewards = {agent: 0 for agent in self.possible_agents}
         self.current_actions = {agent: None for agent in self.agents}
 
-        self.observation_spaces = self._define_observation_spaces()
+        # Action Space to match new agents ID
+        self.action_spaces = {agent: spaces.Discrete(2) for agent in self.agents if  agent.startswith("customer")}
+        self.action_spaces.update({agent: spaces.Discrete(4) for  agent in self.agents if agent.startswith("vendor")})
 
-        for products in self.vendors_products.values():
-            for product in products:
-                product.stock = np.random.randint(5, 100)
+        obs_shape = (15,)  # Replace with your actual observation shape
+        self.observation_spaces = {
+            agent: spaces.Box(low=0, high=1, shape=obs_shape, dtype=np.float32) for agent in self.possible_agents
+        }
+
+
+        # Making sure sel.vendors_products includes all vendors
+        self.vendors_products = {
+            agent: [
+                Product(1, np.random.randint(500, 1000), "Iphone", "Electronics", 20),
+                Product(2, np.random.randint(10, 30), "Apple", "Fruit", 100),
+                Product(3, np.random.randint(5, 15), "Coca-Cola", "Beverages", 80),
+            ]
+            for agent in self.agents if agent.startswith("vendor")  #Ensure only vendors are included
+        }
         # Reset market attributes
-        self.market_prices = {f"vendor_{i}": np.random.randint(10, 50) for i in range(self.vendors)}
-        self.market_price_history = {f"vendor_{i}": [] for i in range(self.vendors)}
-        self.vendors_status = {f"vendor_{i}": "active" for i in range(self.vendors)}
+        self.market_prices = {self.format_agent_name("vendor", i): np.random.randint(10, 50) for i in range(self.vendors)}
+        self.market_price_history = {agent: [] for agent in self.agents if agent.startswith("vendor")}
+        self.vendors_status = {agent: "active" for agent in self.agents if agent.startswith("vendor")}
 
-        return {agent: self.observe(agent) for agent in self.agents}, {}
+        observations = {agent: self.observe(agent) for agent in self.agents}
+
+        return observations, self.infos
+
+    def _define_observation_spaces(self):
+        observation_spaces = {}
+        max_obs_size = 0 # Compute maximum obs space based on the largest observation space
+
+        for agent in self.possible_agents: # iterating over agants that could exist in the env
+            if agent.startswith("customer"):
+                obs_space = spaces.Dict(
+                    {
+                        "vendors": spaces.MultiBinary(self.vendors),
+                        "prices": spaces.Box(low=0, high=500, shape=(self.vendors,), dtype=np.float32),
+                        "stock": spaces.Box(low=0, high=2000, shape=(self.vendors,), dtype=np.int32),
+                        "market_trend": spaces.Discrete(3),
+                        "budget": spaces.Box(low=0, high=500, shape=(1,), dtype=np.float32),
+                    }
+                )
+            elif agent.startswith("vendor"):
+                obs_space = spaces.Dict(
+                    {
+                        "competitor_prices": spaces.Box(low=0, high=500, shape=(self.vendors,), dtype=np.float32),
+                        "own_stock": spaces.Box(low=0, high=2000, shape=(1,), dtype=np.int32),
+                        "market_demand": spaces.Discrete(3),
+                        "sales_history": spaces.Box(low=0, high=100, shape=(5,), dtype=np.float32),
+                        "status": spaces.MultiBinary(1),
+                    }
+                )
+            else:
+                continue #skip unknown agents
+
+            # store raw obs
+            observation_spaces[agent] = obs_space
+
+        #Determine max observation size dynamically
+        flattened_size = spaces.utils.flatten_space(observation_spaces[agent]).shape[0]
+        max_obs_size = max(max_obs_size, flattened_size)
+
+        print(f"[DEBUG] {agent} Raw Observation Space Size: {flattened_size}")
+        # convert dict to a flat box space for for parallel processing
+        for agent in observation_spaces:
+            observation_spaces[agent] = spaces.Box(
+                low=np.zeros(max_obs_size, dtype=np.float32),
+                high=np.full(max_obs_size, 1.0, dtype=np.float32),
+                shape=(max_obs_size,), dtype=np.float32)
+
+        self.max_obs_size = max_obs_size
+        return observation_spaces
+
+    def action_space(self, agent):
+        """Return  action space for agents"""
+        if agent not in self.action_spaces:
+            return self.action_spaces[agent]
 
 
+        return spaces.Discrete(3) # Return a default space if agent is missing
+
+    def observation_space(self, agent):
+        """Return observation space for agents"""
+        if agent not in self.observation_spaces:
+            return self.observation_spaces[agent]
+        return spaces.Box(low=0, high=1, shape=(self.max_obs_size,), dtype=np.float32) # Return default Obs space if agent is missing
         ########### STEP  ##########
-
-    def step(self, action):
+    def step(self, actions):
         """Agent takes action based on observation"""
         if not self.agents:
             raise RuntimeError("Agent is not available")
-        if action is None:
-            return None
 
-        if self.agent_selection not in self.agents:
-            raise KeyError(f"Agent {self.agent_selection} is no longer active. Active agents: {self.agents}")
+        if not isinstance(actions, dict):
+            raise ValueError("Action must be a dictionary")
 
-        # Select current agent
-        agent = self.agent_selection
-        self.current_actions[agent] = action
 
-        if "customer" in agent:
-            if action == 0:  # Purchase
-                vendor = self.select_vendor(agent)
-                product = self.select_product(agent)
+        # Process each agent action
+        for agent, agent_action in self.agents:
+            if agent not in self.agents:
+                continue # skip removed agents
 
-                if vendor and product:
-                    last_price = (
-                        self.market_price_history[vendor][-1]
-                        if self.market_price_history[vendor][-1]
-                        else self.market_prices
+            self.current_actions[agent] = agent_action
+
+            # Customer Actions
+            if agent.startswith("customer"):
+                if agent_action == 0:  # Purchase
+                    vendor = self.select_vendor(agent)
+                    product = self.select_product(agent)
+
+                    # Browses through the market
+                    if vendor and product:
+                        last_price = self.market_price_history.get(vendor, [self.market_prices[vendor]])[-1]
+                        if product.price > last_price * 1.2:
+                            print(f"{agent} is avoiding {vendor} due to high price")
+                            self.rewards[agent] -= 3
+                        else:
+                            self.purchase(agent, vendor, product)
+
+                elif agent_action == 1: # browsing market
+                    best_vendor = min(
+                        self.vendors_products,
+                        key=lambda v: np.mean([p.price for p in self.vendors_products[v]]),
                     )
-                    if product.price > last_price * 1.2:
-                        print(f"{agent} is avoiding {vendor} due to high price")
-                        self.rewards[agent] -= 3
-                    else:
-                        self.purchase(agent, vendor, product)
+                    print(f"{agent} is comparing vendors and prefers {best_vendor}")
+                    self.rewards[agent] += 2
 
-            elif action == 1: # browsing market
-                best_vendor = min(
-                    self.vendors_products,
-                    key=lambda v: np.mean([p.price for p in self.vendors_products[v]]),
-                )
-                print(f"{agent} is comparing vendors and prefers {best_vendor}")
-                self.rewards[agent] += 2
+                elif agent_action == 2: # Negotiate
+                    vendor = self.select_vendor(agent)
+                    product = self.select_product(agent)
+                    if vendor and product:
+                        self.negotiate(agent, product)
 
-            elif action == 2: # Negotiate
-                vendor = self.select_vendor(agent)
-                product = self.select_product(agent)
-                if vendor and product:
-                    self.negotiate(agent, product)
-
-        elif "vendor" in agent:
-            if action == 0:
-                self.adjust_prices(agent)
-            elif action == 1:
-                self.update_product_stock(agent)
+            elif agent.startswith("vendor"):
+                if agent_action == 0:
+                    self.adjust_prices(agent) #Adjust prices
+                elif agent_action == 1:
+                    product = self.select_product(agent) # Select a product to updatequantity = np.random.randint(1, 5) # Random quantity to update
+                    if product:
+                        self.update_product_stock(agent, product, np.random.randint(1,5))
 
         # Update environment
         self.step_count += 1
         self._cumulative_rewards[agent] += self.rewards[agent]
-        # Handle agent turns
-        if self.check_done():
-            for agent in self.agents:
-                if self.check_done[agent]:
-                    self.terminations[agent] = True
-        # Remove terminated agents from self.agents list
-        self._remove_terminated_agents()
 
-        self.infos = {agent: {} for agent in self.agents}
+        # Remove terminated agents
+        agents_to_remove = [a for a in self.agents if self.terminations.get(a, False) or self.truncations.get(a, False)]
+        for agent in agents_to_remove:
+            self.agents.remove(agent)
+            self.terminations.pop(agent, None)
+            self.truncations.pop(agent, None)
+            self.rewards.pop(agent, None)
+            self.current_actions.pop(agent, None)
+            self.infos.pop(agent, None)
 
-        if self.agents:
-            self.agent_selection = self._agent_selector.next()
-        else:
-            self.agent_selection = None
-        # Return updated state
-        if agent in self.possible_agents:
-            if agent not in self.agents:
-                self.terminations[agent] = True
-                self.truncations[agent] = False
+        # Generate observation and rewards
+        observations = {agent: self.observe(agent) for agent in self.agents}
+        rewards = {agent: self.rewards.get(agent, 0) for agent in self.agents}
 
-        if self.agent_selection not in self.agents:
-            print(
-                f"[ERROR] Invalid agent selection after removal: {self.agent_selection}. Active agents: {self.agents}")
-            raise KeyError(f"Agent {self.agent_selection} is no longer active.")
+        # Reset rewards for next step
+        for agent in self.agents:
+            self.rewards[agent] = 0
 
-        obs = self.observe(agent)
-        reward = self.rewards.get(agent, 0)
-        self.terminations = {agent: False for agent in self.agents}
-        self.truncations = {agent: False for agent in self.agents}
+        return observations, rewards, self.terminations, self.truncations, self.infos
 
-        #Remove Terminated agents
-        for agent in list(self.infos.keys()):
-            if self.terminations.get(agent, False) or self.truncations.get(agent, False):
-                del self.infos[agent]
-        print(f"[DEBUG] self.infos before returning step(): {self.infos}")
-        return obs, reward, self.terminations, self.truncations, self.infos
 
+    def last(self, observe: bool = True):
+        """ Returns the final obsrvations and the accumulated rewards """
+        if not self.agents:
+            return {}, {},{},{} # returns empy dictionaries for consistencies
+
+        # Collect observations of all agents
+        observations = {agent: self.observe(agent) for agent in self.agents} if observe else {}
+
+        #Get final accumulated rewards
+        rewards = {agent: self._cumulative_rewards.get(agent, 0) for agent in self.agents}
+
+        # Reset rewards
+        for agent in self.agents:
+            self._cumulative_rewards[agent] = 0
+
+        print(f"[DEBUG] Step() -> Next agent: {self.agent_selection}")
+        print(f"[DEBUG] Last() -> Agent Selection: {self.agent_selection}, Active Agents: {self.agents}")
+
+        return observation, rewards, self.terminations, self.truncations, self.infos
     ########### OBSERVATION  ##########
     def observe(self, agent):
         """Structured observation for customers"""
-        obs_dict = self.get_agent_observation(agent)
 
-        #convert dict to a numpy array
+        # Initialiize empty observations
+        observations = {}
+
+        # Check if agent exists in Observation space
+        for agent in self.agents:
+            if agent not in self.observation_spaces:
+                print(f"Agent {agent} is not found in Observation Space! Empty observation will be returned")
+                observations[agent] = np.zeros(self.max_obs_size, dtype=np.float32)
+                continue  # skip further processing for this agent
+
+            obs_dict = self.get_agent_observation(agent)
+
+        if not obs_dict or not all(isinstance(v, (list, np.ndarray)) for v in obs_dict.values()):
+            print(f"[DEBUG] Invalid obs_dict for {agent}: {obs_dict}")
+            return np.zeros(self.max_obs_size, dtype=np.float32)  # ✅ Ensure valid format
+
+        # convert dict to a numpy array
         obs_array = np.concatenate([np.array(v).flatten() for v in obs_dict.values()])
+
+        #  Flattten and Pad Observation if necessary to fit the space
         flat_obs = spaces.utils.flatten(self.observation_spaces[agent], obs_array)
-
-        # pad observation to match max_obs_size
         padded_obs = np.zeros(self.max_obs_size, dtype=np.float32)
-        padded_obs[:flat_obs.shape[0]] = flat_obs
+        padded_obs[:min(flat_obs.shape[0], self.max_obs_size)] = flat_obs[:self.max_obs_size]
 
+        #Clip Observation to ensure valid space limits
         clipped_obs = np.clip(
             padded_obs,
             self.observation_spaces[agent].low.min(),
             self.observation_spaces[agent].high.max()
         )
-        # Print debug info before processing action
-        print(f"Before Step - Agent: {agent}")
-        print(f"Current Infos Keys: {list(self.infos.keys())}")
 
-        # Ensure `agent` exists in `infos`
+        # Ensure agent exists in `infos`
         if agent not in self.infos:
-            raise KeyError(f"Agent {agent} is missing from env.infos! Current infos: {self.infos}")
+            print(f"Agent {agent} is missing from env.infos! Current infos: {self.infos}")
 
-        return padded_obs
+        observations[agent] = clipped_obs
+
+        return observations
+
+    def state(self):
+        """Returns a Global state of the environment."""
+        return {
+            "market_trend": self.market_trend,
+            "total_transactions": self.total_transactions,
+            "vendor_revenues": self.vendor_revenue,
+            "customer_budgets": self.customer_budgets,
+        }
     ########### GET OBSERVATIONS #############
     def get_agent_observation(self, agent):
-        """"Placeholder for observations"""
-        if agent not in self.agents:
-            return {}
-        if "customer" in agent:
-            return {
+        """"Observation retrieval for multiple agents"""
+
+        observations = {}
+        for agent in self.agents:
+            if agent not in self.agents:
+                observations[agent] = {}
+                continue
+
+        # CUSTOMER OBSERVATION
+        if agent.startswith("customer"):
+            observations[agent] = {
                 "vendors": np.array([
                         1 if self.vendors_products[v] else 0
                         for v in self.vendors_products]
                 ),
-                "prices": np.array([(
+                "prices": np.clip(np.array([(
                             self.round_price(np.mean([p.price for p in self.vendors_products[v]]))
                             if self.vendors_products[v]
                             else 0)
                         for v in self.vendors_products],
-                    dtype=np.float32,
-                ),
-                "stock": np.array([(
+                    dtype=np.float32) / 500.0, 0, 1),
+                "stock": np.clip(np.array([(
                             sum(p.stock for p in self.vendors_products[v])
                             if self.vendors_products[v]
                             else 0)
                         for v in self.vendors_products],
-                    dtype=np.int32,
-                ),
+                    dtype=np.int32) / 200.0, 0, 1),
                 "market_trend": self.market_trend,
                 "budget": np.array([self.round_price(self.customer_budgets.get(agent, 0))], dtype=np.float32),
             }
-        elif "vendor" in agent:
-            return {
+
+        # VENDOR OBSERVATION
+        elif agent.startswith("vendor"):
+            observations[agent] = {
                 "competitor_prices": np.array([(
                             self.round_price(np.mean([p.price for p in self.vendors_products[v]]))
                             if self.vendors_products[v]
@@ -391,34 +460,49 @@ class MarketAECEnv(AECEnv):
                         if v != agent],
                     dtype=np.float32,
                 ),
-                "own_stock": np.array(
-                    [sum(p.stock for p in self.vendors_products[agent])], dtype=np.int32
+                "own_stock": np.clip(np.array(
+                    [sum(p.stock for p in self.vendors_products[agent])], dtype=np.float32) / 200.0, 0, 1
                 ),
                 "market_demand": self.market_trend,
-                "sales_history": np.array((
+                "sales_history": np.clip(np.array((
                         self.market_price_history[agent][-5:]
                         if len(self.market_price_history[agent]) >= 5
                         else self.market_price_history[agent] + [0] * (5 - len(self.market_price_history[agent]))),
-                    dtype=np.float32,
+                    dtype=np.float32) / 500.0, 0, 1
                 ),
                 "status": 1 if self.vendors_status[agent] == "active" else 0,
             }
-        return {}
+        return observations.get(agent, {})
 
 
     def _remove_terminated_agents(self):
         """Removes terminated agents"""
-        self.agents = [agent for agent in self.agents if not self.terminations.get(agent, False)]
+        terminated_agents = {agent for agent in self.agents if self.terminations.get(agent, False)}
+
+        # Remove agents effieciently
+        self.agents = [agent for agent in self.agents if agent not in terminated_agents]
+        self.possible_agents = self.agents[:]
     #########  REWARD FUNCTION ############
     def select_vendor(self, customer):
+        """Selects multiple vendors for customers in parallel"""
         vendors_list = [
             v for v in self.vendors_products if self.vendors_products[v]]
-        return np.random.choice(vendors_list) if vendors_list else None
+        # Randomly assigns a vendor to a customer
+        return {
+            customer: np.random.choice(vendors_list) if vendors_list else None
+        for customer in customers
+        }
 
     def select_product(self, vendor):
-        if vendor and vendor in self.vendors_products and self.vendors_products[vendor]:
-            return np.random.choice(self.vendors_products[vendor])
-        return None
+        """Selects single product for customers in parallel"""
+
+        return {
+            vendor: np.random.choice(self.vendors_products[vendor])
+            if vendor in self.vendors_products and self.vendors_products[vendor]
+            else None
+            for vendor in vendors
+        }
+
 
     def check_done(self):
         """
@@ -427,33 +511,49 @@ class MarketAECEnv(AECEnv):
         A vendor is done if they have no products left.
         The environment is done if all customers or all vendors are done.
         """
-        done_customers = {
-            customer
-            for customer in self.customer_budgets
+
+        done_customers = {customer for customer in self.customer_budgets
             if self.customer_budgets[customer] <= 0
         }
-        done_vendors = {
-            vendor
-            for vendor in self.vendors_products
+        done_vendors = {vendor for vendor in self.vendors_products
             if not self.vendors_products[vendor]
         }
-
-        print(
-            f"[DEBUG] Done Customers: {done_customers} | Done Vendors: {done_vendors}"
-        )
-        for customer in done_customers:
-            self.terminations[customer] = True
-        for vendor in done_vendors:
-            self.terminations[vendor] = True
+        print(f"[DEBUG] Done Customers: {done_customers} | Done Vendors: {done_vendors}")
 
         all_customers_done = len(done_customers) == len(self.customer_budgets)
         all_vendors_done = len(done_vendors) == len(self.vendors_products)
 
+        #Track removed agents
         if all_customers_done or all_vendors_done:
             print(f"[DEBUG] All agents are done. Terminating environment.")
             self.done_agents.update(done_customers | done_vendors)
+            self.agents.clear()
+            self.possible_agents.clear()
+            return True
+
+        terminated_agents = done_customers | done_vendors
+
+        #Batch update for terminated agents
+        for agent in terminated_agents:
+            self.terminations[agent] = True
+            self.truncations[agent] = True
+            print(f"[DEBUG] check_done() -> Marked {agent} as terminated.")
+        # Delete agents completely
+        for agent in terminated_agents:
+            print(f"[DEBUG] check_done() -> Removing {agent} from terminations.")
+            self.truncations.pop(agent, None)
+            self.rewards.pop(agent, None)
+            self.current_actions.pop(agent, None)
+            self.infos.pop(agent, None)
+
+        if not self.agents:
+            print(f"[DEBUG] All agents are done. Clearing environment.")
+            self.agents.clear()
+            self.possible_agents.clear()
             return True
         return False
+
+
 
     def monitor_market(self):
         """Monitor market trends"""
@@ -469,16 +569,14 @@ class MarketAECEnv(AECEnv):
                 if len(history) >= 3
             ]
 
-        price_trends = []
-        for history in last_prices:
-            last_price = np.array(history[-3:])
-            if len(last_price) < 3:
-                continue
-            price_change = (last_price[-1] - last_price[0]) / last_price[0] # % change in the last 3 steps
-            price_trends.append(price_change)
-
+        # Calculate price change per trends
+        price_trends = [
+            (history[-1] - history[0]) / history[0] if len(history) ==3 and history[0] != 0 else 0
+            for history in last_prices
+        ]
 
         avg_trend = np.mean(price_trends) if price_trends else 0
+
         if avg_trend > PRICE_CHANGE_THRESHOLD:
             self.market_trend = 1 #High Demand
         elif avg_trend < -PRICE_CHANGE_THRESHOLD:
@@ -496,15 +594,11 @@ class MarketAECEnv(AECEnv):
             self.market_trend = -1 #Decreasing demand
 
 
-
-        self.active_vendors = sum(
-            1 for v in self.vendors_status.values() if v == "active"
-        )
+        # Count active or inactive vendors
+        self.active_vendors = sum(1 for v in self.vendors_status.values() if v == "active")
         self.inactive_vendors = self.vendors - self.active_vendors
-        self.total_transactions = sum(
-            len(products) for products in self.vendors_products.values()
-        )
 
+        self.total_transactions = sum(len(products) for products in self.vendors_products.values())
         return {
             "market_trend": self.market_trend,
             "active_vendors": self.active_vendors,
@@ -554,9 +648,11 @@ class MarketAECEnv(AECEnv):
 
 
     def update_product_stock(self, vendor, product, quantity):
-        """Updates stock"""
-        if product in self.vendors_products[vendor]:
+        """Updates stock for vendors"""
+        if product in self.vendors_products[vendor]: # Check if product exist with the vendor
             product.update_stock(quantity)
+        else:
+            print(f"{vendor} does not have {product}")
 
     def update_status(self, vendor):
         """Update vendor's status"""
