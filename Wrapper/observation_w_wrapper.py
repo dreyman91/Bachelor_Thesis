@@ -1,7 +1,7 @@
 import pandas as pd
 from tabulate import tabulate
 from pettingzoo.mpe import simple_spread_v3
-from Wrapper.observabilty_wrapper import DynamicObservabilityWrapper
+from Wrapper.observabilty_wrapper1 import DynamicObservabilityWrapper
 
 env = simple_spread_v3.parallel_env(render_mode="human")
 
