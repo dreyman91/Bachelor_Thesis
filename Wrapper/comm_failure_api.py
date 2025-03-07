@@ -62,7 +62,7 @@ b. Parameters:
         failures.
         - noise_mean: mean noise distribution for observation modification.
         - noise_std: standard deviation noise distribution for observation modification.
-        - noise_distribution: a string that specifies the type of noise distribution to apply.
+        - noise_distribution: a string that specifies the type of noise distribution to apply..
         - custom_noise_fn: user-defined noise addition.
         
 c. _Validate_comms_matrix(matrix): A private method that performs input validation check on the provided matrix.

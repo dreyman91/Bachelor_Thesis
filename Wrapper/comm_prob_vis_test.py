@@ -66,7 +66,7 @@ for i in range(num_agents):
             'Received Agent': wrapped_env.possible_agents[j],
             'Failure Rate': fail_rates[i, j],
             'Attempts': comm_attempts[i, j],
-            'Failures': comm_failures[i, j]
+            'Failures.': comm_failures[i, j]
         })
 
 df = pd.DataFrame(data)

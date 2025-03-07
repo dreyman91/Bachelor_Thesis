@@ -10,7 +10,7 @@ for _ in range(5):  # Short loop
     actions = {agent: wrapped_env.action_space(agent).sample() for agent in wrapped_env.agents}
     print(f"Actions BEFORE step: {actions}")  # KEY PRINT STATEMENT
     observations, rewards, terminations, truncations, infos = wrapped_env.step(actions)
-    print(f"Actions AFTER step: {actions}")  # KEY PRINT STATEMENT
+    print(f"Actions AFTER step.: {actions}")  # KEY PRINT STATEMENT
 
     if all(terminations.values()) or all(truncations.values()):
         break

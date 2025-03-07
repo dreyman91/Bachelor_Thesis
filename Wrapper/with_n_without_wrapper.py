@@ -38,6 +38,6 @@ env.close()
 wrapped_env.close()
 
 df_raw = pd.DataFrame.from_dict(obs, orient='index')
-print(f"Obs without Wrapper {df_raw}")
+print(f"Obs without Wrapper. {df_raw}")
 df_norm = pd.DataFrame.from_dict(wrapped_obs, orient='index')
 print(df_norm)
