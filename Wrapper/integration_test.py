@@ -1,5 +1,5 @@
 from pettingzoo.mpe import simple_spread_v3
-from Wrapper.comm_failure_api import CommunicationFailure
+from Wrapper.comm_failure_api_v0 import CommunicationFailure
 
 env = simple_spread_v3.parallel_env()
 wrapped_env = CommunicationFailure(env, comms_model="probabilistic", failure_prob=0.3, seed=42)

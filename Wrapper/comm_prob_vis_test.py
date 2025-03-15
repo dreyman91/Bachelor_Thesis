@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from pettingzoo.mpe import simple_spread_v3
-from Wrapper.comm_failure_api import CommunicationFailure
+from Wrapper.comm_failure_api_v0 import CommunicationFailure
 from Wrapper.parallel_prob_test import wrapped_env
 
 #-----Simulation Parameters------------#

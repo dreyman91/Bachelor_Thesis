@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from tabulate import tabulate
 from pettingzoo.mpe import simple_spread_v3
-from Wrapper.comm_failure_api import CommunicationFailure
+from Wrapper.comm_failure_api_v0 import CommunicationFailure
 
 env = simple_spread_v3.parallel_env(max_cycles=25)
 wrapped_env = CommunicationFailure(
