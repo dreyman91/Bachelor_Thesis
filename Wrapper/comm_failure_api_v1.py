@@ -2,14 +2,16 @@ import numpy as np
 from pettingzoo import AECEnv
 from gymnasium import spaces
 import gymnasium as gym
-from typing import Dict, Optional, Union, List, Tuple, Any, Callable
+from typing import Dict, Optional, Union, List, Tuple, Any, Callable, cast
 import warnings
 from pettingzoo.utils import BaseWrapper
 from pettingzoo.utils.env import ActionType, ObsType, AgentID
 from abc import ABC, abstractmethod
 
+
 class ActiveCommunication:
     """Represents the actual communication state between agents."""
+
     def __init__(self,
                  agent_ids: List[str],
                  initial_matrix: Optional[np.ndarray] = None):
@@ -25,7 +27,7 @@ class ActiveCommunication:
 
     @staticmethod
     def _validate_matrix(matrix, num_agents):
-        if matrix_shape != (num_agents, num_agents):
+        if matrix.shape != (num_agents, num_agents):
             raise ValueError(f"Matrix must be {num_agents} x {num_agents}")
         if not np.all(np.diag(matrix) == 1):
             raise ValueError(f"Self Communication must always be enabled")
@@ -42,7 +44,7 @@ class ActiveCommunication:
         """Updates communication status"""
         sender_idx = self.agent_id_to_index[sender]
         receiver_idx = self.agent_id_to_index[receiver]
-        self.matrix[sender_idx][receiver_idx] = can_communicate
+        self.matrix[receiver_idx, sender_idx] = can_communicate
 
     def get_blocked_agents(self, agent: str) -> List[str]:
         """Returns a list of agents that cannot communicate with the given agent."""
@@ -62,6 +64,7 @@ class ActiveCommunication:
 
 class CommunicationModels(ABC):
     """Abstract base class for communication models."""
+
     @abstractmethod
     def update_connectivity(self, comms_matrix: ActiveCommunication):
         """Updates the ActiveCommunication and inject failures"""
@@ -72,6 +75,7 @@ class CommunicationModels(ABC):
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
         """Creates the initial ActiveCommunication matrix before failures"""
         pass
+
 
 class DistanceModel(CommunicationModels):
     def __init__(self, agent_ids: List[str], distance_threshold: float, pos_fn: Callable[[], Dict[str, np.ndarray]],
@@ -98,6 +102,7 @@ class DistanceModel(CommunicationModels):
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
         return np.ones((len(agent_ids), len(agent_ids)), dtype=bool)
 
+
 class ProbabilisticModel(CommunicationModels):
     def __init__(self, agent_ids: List[str], failure_prob: float, seed: Optional[int] = None):
         self.agent_ids = agent_ids
@@ -110,10 +115,10 @@ class ProbabilisticModel(CommunicationModels):
                 if sender != receiver:
                     if self.rng.random() < self.failure_prob:
                         comms_matrix.update(sender, receiver, False)
-
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
         return np.ones((len(agent_ids), len(agent_ids)), dtype=bool)
+
 
 class MatrixModel(CommunicationModels):
     def __init__(self, agent_ids: List[str], comms_matrix_values: np.ndarray, failure_prob: float = 0.0,
@@ -141,6 +146,7 @@ class MatrixModel(CommunicationModels):
 
 class NoiseModel(ABC):
     """Base class for noise models."""
+
     def __init__(self, rng=None):
         self.rng = rng or np.random.default_rng()
 
@@ -149,35 +155,63 @@ class NoiseModel(ABC):
         self.rng = rng
 
     @abstractmethod
-    def apply(self, obs:Any):
+    def apply(self, obs: Any):
         """Appy noise to an Observation."""
         pass
 
+
 class GaussianNoise(NoiseModel):
-    def __init__(self, mean: float = 0.0, std: float = 0.1, rng=None):
+    def __init__(self, mean: float = 0.0, std: float = 0.0, rng=None):
         super().__init__(rng)
         self.mean = mean
         self.std = std
 
-    def apply(self, obs:Any) -> Any:
+    def apply(self, obs: Any, observation_space: Optional[spaces.Space] = None) -> Any:
         if isinstance(obs, np.ndarray):
-            noise = self.rng.normal(self.mean, self.std, size=obs.shape)
-            return obs + noise
+            if observation_space is not None and isinstance(observation_space, spaces.Box):
+                noise = self.rng.normal(loc=self.mean, scale=self.std, size=obs.shape)
+                noisy_obs = obs + noise
+                noisy_obs = np.clip(noisy_obs, observation_space.low, observation_space.high)
+                return noisy_obs
+
+            else: # if not known Box space, just add noise
+                return obs + self.rng.normal(loc=self.mean, scale=self.std, size=obs.shape)
 
         elif isinstance(obs, dict):
             noisy_obs = {}
             for k, v in obs.items():
                 if isinstance(v, np.ndarray):
-                    noise = self.rng.normal(self.mean, self.std, size=v.shape)
-                    noisy_obs[k] = v + noise
-                elif isinstance(v, (int, float, np.integer)):
-                    noise = self.rng.normal(self.mean, self.std)
-                    noisy_obs[k] = v + noise
+                    if observation_space and k in observation_space and isinstance(observation_space[k], spaces.Box):
+                        noise = self.rng.normal(loc=self.mean, scale=self.std, size=v.shape)
+                        noise_arr = v + noise
+                        noise_arr = np.clip(noise_arr, observation_space[k].low, observation_space[k].high)
+                        noisy_obs[k] = noise_arr
+                    else:  # No Observation space, or not a box
+                        noisy_obs[k] = v + self.rng.normal(self.mean, self.std, size=v.shape)
+
+                elif isinstance(v, (int, float, np.integer)):  # Handle Discrete and MultiDiscrete
+                    if observation_space and k in observation_space:
+                        if isinstance(observation_space[k], spaces.Discrete):
+                            noise_val = v + self.rng.normal(self.mean, self.std)
+                            clipped_val = np.clip(noise_val, 0, observation_space[k].n - 1)
+                            noisy_obs[k] = int(round(clipped_val))
+                        elif isinstance(observation_space[k], spaces.MultiDiscrete):
+                            noise_val = v + self.rng.normal(self.mean, self.std)
+                            clipped_val = np.clip(noise_val, 0, observation_space[k].nvec - 1)
+                            noisy_obs[k] = np.round(clipped_val).astype(int)
+                        elif isinstance(observation_space[k], spaces.Box):
+                            noise = self.rng.normal(self.mean, self.std)
+                            noise_arr = float(v) + noise
+                            noise_arr = np.clip(noise_arr, observation_space[k].low, observation_space[k].high)
+                            noisy_obs[k] = noise_arr
+                        else:
+                            noisy_obs[k] = v + self.rng.normal(self.mean, self.std)
                 else:
                     noisy_obs[k] = v
             return noisy_obs
         else:
             return obs
+
 
 class LaplacianNoise(NoiseModel):
     """Applies Laplacian Noise to the Observation"""
@@ -186,56 +220,84 @@ class LaplacianNoise(NoiseModel):
         self.loc = loc
         self.scale = scale
 
-    def apply(self, obs:Any) -> Any:
+    def apply(self, obs: Any, observation_space: Optional[spaces.Space] = None) -> Any:
         if isinstance(obs, np.ndarray):
-            noise = self.rng.laplace(self.loc, self.scale, size=obs.shape)
-            return obs + noise
+            if observation_space is not None and isinstance(observation_space, spaces.Box):
+                noise = self.rng.laplace(loc=self.loc, scale=self.scale, size=obs.shape)
+                noisy_obs = obs + noise
+                noisy_obs = np.clip(noisy_obs, observation_space.low, observation_space.high)
+                return noisy_obs
+            else:  # if not known Box space, just add noise
+                return obs + self.rng.laplace(loc=self.loc, scale=self.scale, size=obs.shape)
 
         elif isinstance(obs, dict):
             noisy_obs = {}
             for k, v in obs.items():
                 if isinstance(v, np.ndarray):
-                    noise = self.rng.laplace(self.loc, self.scale, size=v.shape)
-                    noisy_obs[k] = v + noise
-                elif isinstance(v, (int, float, np.integer)):
-                    noise = self.rng.laplace(self.loc, self.scale)
-                    noisy_obs[k] = v + noise
+                    if observation_space and k in observation_space and isinstance(observation_space[k], spaces.Box):
+                        noise = self.rng.laplace(loc=self.loc, scale=self.scale, size=v.shape)
+                        noise_arr = v + noise
+                        noise_arr = np.clip(noise_arr, observation_space[k].low, observation_space[k].high)
+                        noisy_obs[k] = noise_arr
+                    else:  # No Observation space, or not a box
+                        noisy_obs[k] = v + self.rng.laplace(self.loc, self.scale, size=v.shape)
+
+                elif isinstance(v, (int, float, np.integer)):  # Handle Discrete and MultiDiscrete
+                    if observation_space and k in observation_space:
+                        if isinstance(observation_space[k], spaces.Discrete):
+                            noise_val = v + self.rng.laplace(self.loc, self.scale)
+                            clipped_val = np.clip(noise_val, 0, observation_space[k].n - 1)
+                            noisy_obs[k] = int(round(clipped_val))
+                        elif isinstance(observation_space[k], spaces.MultiDiscrete):
+                            noise_val = v + self.rng.laplace(self.loc, self.scale)
+                            clipped_val = np.clip(noise_val, 0, observation_space[k].nvec - 1)
+                            noisy_obs[k] = np.round(clipped_val).astype(int)
+                        elif isinstance(observation_space[k], spaces.Box):
+                            noise = self.rng.laplace(self.loc, self.scale)
+                            noise_arr = float(v) + noise
+                            noise_arr = np.clip(noise_arr, observation_space[k].low, observation_space[k].high)
+                            noisy_obs[k] = noise_arr
+                        else:
+                            noisy_obs[k] = v + self.rng.laplace(self.loc, self.scale)
                 else:
                     noisy_obs[k] = v
             return noisy_obs
         else:
             return obs
 
+
 class CustomNoise(NoiseModel):
-    def __init__(self, noise_fn: Callable[[Any], Any], rng=None):
+    def __init__(self, noise_fn: Callable[[Any, Optional[spaces.Space]], Any], rng=None):
         super().__init__(rng)
         self.noise_fn = noise_fn
         if not callable(noise_fn):
             raise ValueError("Noise function must be callable")
 
-    def apply(self, obs:Any) -> Any:
-        return self.noise_fn(obs)
+    def apply(self, obs: Any, observation_space: Optional[spaces.Space] = None) -> Any:
+        noisy_obs = self.noise_fn(obs, observation_space)
+        return noisy_obs
+
 
 class CommunicationFailure(BaseWrapper):
     def __init__(self,
                  env: AECEnv[AgentID, ActionType, ObsType],
                  failure_models: List[CommunicationModels] = None,
                  noise_model: NoiseModel = None,
-                 agent_ids: Optional[List[str]] = None,
-                 seed: Optional[int] = None):
+                 agent_ids: Optional[List[str]] = None
+                 ):
         super().__init__(env)
 
         if not isinstance(env, AECEnv):
             raise TypeError("The provided environment must be an instance of AECEnv")
 
         self.agent_ids = agent_ids or list(env.possible_agents)
-        self.seed = seed
-        self.rng = np.random.default_rng(seed)
+        self.seed_val = None
+        self.rng = np.random.default_rng(self.seed_val)
         self.comms_matrix = ActiveCommunication(self.agent_ids)
 
         # set default models if User provided none
-        self.failure_models = failure_models or  [ProbabilisticModel(self.agent_ids,
-                                                                     failure_prob=0.3, seed=seed)]
+        self.failure_models = failure_models or [ProbabilisticModel(self.agent_ids,
+                                                                    failure_prob=0.3, seed=self.seed_val)]
         self.noise_model = noise_model or GaussianNoise(0.0, 0.1, self.rng)
 
         for model in self.failure_models:
@@ -248,7 +310,7 @@ class CommunicationFailure(BaseWrapper):
         for model in self.failure_models:
             model.update_connectivity(self.comms_matrix)
 
-    def modify_observation(self, agent: str, raw_obs: Any) -> Any:
+    def modify_observation(self, agent: str, noisy_obs: Any) -> Any:
         """Modify an agent's observation based on communication failures"""
         communication_failures = any(
             not self.comms_matrix.can_communicate(sender, agent)
@@ -256,12 +318,13 @@ class CommunicationFailure(BaseWrapper):
             if sender != agent
         )
         if communication_failures:
-            return self.noise_model.apply(raw_obs)
+            return noisy_obs
         else:
-            return raw_obs
+            return noisy_obs
 
-    def filter_action(self, agent: str, action: Any) ->Any:
+    def filter_action(self, agent: str, action: Any) -> Any:
         """Filter an Agent's action if it cannot communicate with others. """
+
         can_send = any(
             self.comms_matrix.can_communicate(agent, receiver)
             for receiver in self.agent_ids
@@ -284,19 +347,21 @@ class CommunicationFailure(BaseWrapper):
     def step(self, action: Any):
         """Take a step in the environment"""
         current_agent = self.env.agent_selection
+        if self.env.terminations.get(current_agent, False) or self.env.truncations.get(current_agent, False):
+            self.env.step(None)  # Ensure the environment gets None action
+            return
         filtered_action = self.filter_action(current_agent, action)
         self.env.step(filtered_action)
         self._update_communication_state()
-        obs, rew, term, trunc, info = self.env.last()
-        modified_obs = self.modify_observation(current_agent, obs)
-        return modified_obs, rew, term, trunc, info
 
     def reset(self, seed=None, options=None):
         """Reset the environment and communication state."""
         self.env.reset(seed=seed, options=options)
         self.comms_matrix.reset()
-        if seed is not  None:
-            self.rng = np.random.default_rng(seed)
+        self._update_communication_state()
+        if seed is not None:
+            self.seed_val = seed
+            self.rng = np.random.default_rng(self.seed_val)
             for model in self.failure_models:
                 model.rng = self.rng
             self.noise_model.rng = self.rng
@@ -307,12 +372,20 @@ class CommunicationFailure(BaseWrapper):
         infos = {}
         return modified_initial_obs, infos
 
+    def seed(self, seed=None):
+        self.seed_val = seed
+        self.reset(seed=seed)
+
     def observe(self, agent):
         raw_obs = self.env.observe(agent)
-        return self.modify_observation(agent, raw_obs)
+        observation_space = self.env.observation_space(agent)
+        noisy_obs = self.noise_model.apply(raw_obs, observation_space)
+        return self.modify_observation(agent, noisy_obs)
 
     def last(self, observe: bool = True) -> tuple[ObsType | None, float, bool, bool, dict[str, Any]]:
         obs, rew, term, trunc, info = self.env.last()
+        if not observe:
+            return None, rew, term, trunc, info
         modified_obs = self.modify_observation(self.env.agent_selection, obs)
         return modified_obs, rew, term, trunc, info
 
@@ -334,10 +407,3 @@ class CommunicationFailure(BaseWrapper):
         """Set new Noise model for the environment."""
         model.rng = self.rng
         self.noise_model = model
-
-
-
-
-
-
-
