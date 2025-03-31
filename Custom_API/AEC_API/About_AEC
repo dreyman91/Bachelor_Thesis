@@ -1,6 +1,0 @@
-1. We initialize the environment
-2 We reset the environment
-3. We iterate through the agents on by one using agent_iter()
-4. Each agent observes, takes an action, and steps forward.
-5. If an agent is done , they dont take an action.
-6. The environment cycles theough the next agent.
