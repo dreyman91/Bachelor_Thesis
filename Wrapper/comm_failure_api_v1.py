@@ -16,7 +16,7 @@ the User to define various models for how communication between agents can be di
 probabilistic) and how observations can be corrupted by noise(Gaussian, Laplacian). This is crucial for training
 training robust agents that can perform well under imperfect communication conditions.
 
-- class ActiveCommunication: Manages the current state of communication links or maintains the communication 
+- class ActiveCommunication:- Manages the current state of communication links or maintains the communication 
 matrix that defines which agents can talk together. Allows updates when failures occur, blocks communication 
 between some agents, and can reset to a fully connected state.
 
