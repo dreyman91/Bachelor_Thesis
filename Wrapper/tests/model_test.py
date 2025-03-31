@@ -1,6 +1,4 @@
-import numpy as np
-
-from Wrapper.src.Comm_Wrapper.comm_failure_api_v1 import ActiveCommunication
+from Wrapper.src.wrapper_api.wrappers.comm_failure_api_v1 import ActiveCommunication
 
 agents = ["agent_0", "agent_1"]
 comm = ActiveCommunication(agent_ids=agents)
