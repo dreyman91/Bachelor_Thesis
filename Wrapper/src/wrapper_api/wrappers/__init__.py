@@ -1,2 +1,2 @@
-from.communication_wrapper import CommunicationFailure
-from.noise_wrapper import NoiseModel
+from .communication_wrapper import CommunicationWrapper
+from .noise_wrapper import NoiseWrapper

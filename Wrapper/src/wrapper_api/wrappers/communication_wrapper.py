@@ -3,6 +3,7 @@ from pettingzoo import AECEnv
 from gymnasium import spaces
 import numpy as np
 import gymnasium as gym
+from pettingzoo.utils.env import AgentID, ObsType, ActionType
 from typing import Dict, Optional, Union, List, Tuple, Any, Callable, cast
 import warnings
 from Wrapper.src.wrapper_api.models.active_communication import ActiveCommunication
@@ -57,6 +58,19 @@ class CommunicationWrapper(BaseWrapper):
                 return 0
         return action
 
+    def _apply_comm_mask(self,  obs: dict, receiver: str)->dict:
+        """
+        Masks the part of the Obs dictionary that the receiver
+        should not see based on the communication matrix.
+        """
+        for sender in self.agent_ids:
+            if sender != receiver and not self.comms_matrix.can_communicate(
+                    sender, receiver
+            ):
+                if sender in obs:
+                    obs[sender] = np.zeros_like(obs[sender])
+        return obs
+
     def step(self, action: Any):
         """Take a step in the environment"""
         current_agent = self.env.agent_selection
@@ -77,6 +91,23 @@ class CommunicationWrapper(BaseWrapper):
         for model in self.failure_models:
             model.rng = self.rng
         return result
+
+    def observe(self, agent: str):
+        raw_obs = self.env.observe(agent)
+        if isinstance(raw_obs, dict):
+            raw_obs = self._apply_comm_mask(raw_obs, agent)
+        return raw_obs
+
+    def last(self, observe: bool = True):
+        obs, rew, term, trunc, info = self.env.last(observe)
+        if not observe:
+            return None, rew, term, trunc, info
+
+        current_agent = self.env.agent_selection
+        if isinstance(obs, dict):
+            obs = self._apply_comm_mask(obs, current_agent)
+
+        return obs, rew, term, trunc, info
 
     def get_communication_state(self):
         return self.comms_matrix.get_state()
