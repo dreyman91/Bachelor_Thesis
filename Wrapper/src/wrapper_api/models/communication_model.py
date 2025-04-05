@@ -73,13 +73,12 @@ class MatrixModel(CommunicationModels):
     def update_connectivity(self, comms_matrix: ActiveCommunication):
         for sender in comms_matrix.agent_ids:
             for receiver in comms_matrix.agent_ids:
-                if sender != receiver:
-                    sender_idx = comms_matrix.agent_id_to_index[sender]
-                    receiver_idx = comms_matrix.agent_id_to_index[receiver]
-                    initial_connectivity = self.comms_matrix_values[sender_idx, receiver_idx] == 1
-
-                    if initial_connectivity and self.rng.random() < self.failure_prob:
-                        comms_matrix.update(sender, receiver, False)
+                sender_idx = comms_matrix.agent_id_to_index[sender]
+                receiver_idx = comms_matrix.agent_id_to_index[receiver]
+                allowed = self.comms_matrix_values[sender_idx, receiver_idx]
+                if allowed and self.rng.random() < self.failure_prob:
+                    allowed = False
+                comms_matrix.update(sender, receiver, allowed)
 
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:

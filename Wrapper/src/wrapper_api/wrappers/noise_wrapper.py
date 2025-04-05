@@ -1,3 +1,4 @@
+import numpy as np
 from pettingzoo import AECEnv
 from gymnasium import spaces
 from typing import Optional, Any
@@ -10,25 +11,27 @@ from Wrapper.src.wrapper_api.models.noise_model import NoiseModel
 class NoiseWrapper(BaseWrapper):
     def __init__(self,
                  env: AECEnv,
-                 noise_model: NoiseModel = None):
+                 noise_model: NoiseModel = None,
+                 seed: Optional[int] = None):
         super().__init__(env)
-
         self.noise_model = noise_model
         self.seed_val = seed
         self.rng = np.random.default_rng(self.seed_val)
-        self.noise_model.rng =self.rng
+        self.noise_model.rng = self.rng
 
     def reset(self, seed=None, options=None):
         """ Reset the environment and update seed for noise model."""
-        self.reset_rng()
         result = self.env.reset(seed=seed, options=options)
-        self.noise_model.rng = self.rng
+        if seed is not None:
+            self.seed_val = seed
+            self.rng = np.random.default_rng(seed)
+            self.noise_model.rng = self.rng
         return result
 
     def observe(self, agent):
         """Apply noise to the observation."""
         raw_obs = self.env.observe(agent)
-        observation_space = self.env.observation_space
+        observation_space = self.env.observation_space(agent)
         return self.noise_model.apply(raw_obs, observation_space)
 
     def last(self, observe: bool = True):
