@@ -5,7 +5,7 @@ from typing import Optional, Any
 from abc import ABC, abstractmethod
 from pettingzoo.utils import BaseWrapper
 
-from Wrapper.src.wrapper_api.models.noise_model import NoiseModel
+from Failure_API.src.wrapper_api.models.noise_model import NoiseModel
 
 
 class NoiseWrapper(BaseWrapper):
@@ -29,19 +29,46 @@ class NoiseWrapper(BaseWrapper):
         return result
 
     def observe(self, agent):
-        """Apply noise to the observation."""
+        """Apply noise to the observation of other_agents."""
         raw_obs = self.env.observe(agent)
         observation_space = self.env.observation_space(agent)
-        return self.noise_model.apply(raw_obs, observation_space)
+
+        if isinstance(raw_obs, dict):
+            noisy_obs = {}
+            for sender, obs_values in raw_obs.items():
+                if sender == agent:
+                    noisy_obs[sender] = obs_values
+                else:
+                    if sender in observation_space:
+                        noisy_obs[sender] = self.noise_model.apply(obs_values, observation_space[sender])
+                    else:
+                        noisy_obs[sender] = self.noise_model.apply(obs_values)
+            return noisy_obs
+        else:
+            return self.noise_model.apply(raw_obs, observation_space)
 
     def last(self, observe: bool = True):
         """Applies noise to the last observation id observe is True."""
         obs, rew, term, trunc, info = self.env.last()
         if not observe:
             return None, rew, term, trunc, info
+
+        current_agent = self.env.agent_selection
         observation_space = self.env.observation_space(self.env.agent_selection)
-        noisy_obs = self.noise_model.apply(obs, observation_space)
-        return noisy_obs, rew, term, trunc, info
+
+        if isinstance(raw_obs, dict):
+            noisy_obs = {}
+            for sender, obs_values in obs.items():
+                if sender == current_agent:
+                    noisy_obs[sender] = obs_values
+                else:
+                    if sender in observation_space:
+                        noisy_obs[sender] = self.noise_model.apply(obs_values, observation_space[sender])
+                    else:
+                        noisy_obs[sender] = self.noise_model.apply(obs_values)
+            return noisy_obs
+        else:
+            return self.noise_model.apply(obs, observation_space), rew, term, trunc, info
 
     def set_noise_model(self, model: NoiseModel):
         """Set custom noise model."""

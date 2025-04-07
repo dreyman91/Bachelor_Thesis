@@ -66,7 +66,7 @@ class MatrixModel(CommunicationModels):
     def __init__(self, agent_ids: List[str], comms_matrix_values: np.ndarray, failure_prob: float = 0.0,
                  seed: Optional[int] = None):
         self.agent_ids = agent_ids
-        self.comms_matrix_values = comms_matrix_values
+        self.comms_matrix_values = comms_matrix_values.astype(bool)
         self.failure_prob = failure_prob
         self.rng = np.random.default_rng(seed)
 
@@ -79,7 +79,6 @@ class MatrixModel(CommunicationModels):
                 if allowed and self.rng.random() < self.failure_prob:
                     allowed = False
                 comms_matrix.update(sender, receiver, allowed)
-
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
         return np.array([], dtype=bool)

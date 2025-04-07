@@ -6,8 +6,8 @@ import gymnasium as gym
 from pettingzoo.utils.env import AgentID, ObsType, ActionType
 from typing import Dict, Optional, Union, List, Tuple, Any, Callable, cast
 import warnings
-from Wrapper.src.wrapper_api.models.active_communication import ActiveCommunication
-from Wrapper.src.wrapper_api.models.communication_model import CommunicationModels
+from Failure_API.src.wrapper_api.models.active_communication import ActiveCommunication
+from Failure_API.src.wrapper_api.models.communication_model import CommunicationModels
 
 
 
@@ -80,6 +80,10 @@ class CommunicationWrapper(BaseWrapper):
         filtered_action = self.filter_action(current_agent, action)
         self.env.step(filtered_action)
         self._update_communication_state()
+
+    def reset_rng(self, seed=None):
+        self.seed_val = seed
+        self.rng = np.random.default_rng(self.seed_val)
 
     def reset(self, seed=None, options=None):
         """Reset the environment and communication state."""
