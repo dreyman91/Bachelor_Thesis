@@ -103,6 +103,9 @@ class CommunicationWrapper(BaseWrapper):
         return raw_obs
 
     def last(self, observe: bool = True):
+        agent = self.env.agent_selection
+        if agent not in self.env.agents:
+            return None, 0.0, True, False, {}
         obs, rew, term, trunc, info = self.env.last(observe)
         if not observe:
             return None, rew, term, trunc, info

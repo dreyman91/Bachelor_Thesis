@@ -49,6 +49,9 @@ class NoiseWrapper(BaseWrapper):
 
     def last(self, observe: bool = True):
         """Applies noise to the last observation id observe is True."""
+        agent = self.env.agent_selection
+        if agent not in self.env.agents:
+            return None, 0.0, True, False, {}
         obs, rew, term, trunc, info = self.env.last()
         if not observe:
             return None, rew, term, trunc, info
@@ -56,7 +59,7 @@ class NoiseWrapper(BaseWrapper):
         current_agent = self.env.agent_selection
         observation_space = self.env.observation_space(self.env.agent_selection)
 
-        if isinstance(raw_obs, dict):
+        if isinstance(obs, dict):
             noisy_obs = {}
             for sender, obs_values in obs.items():
                 if sender == current_agent:
@@ -66,7 +69,7 @@ class NoiseWrapper(BaseWrapper):
                         noisy_obs[sender] = self.noise_model.apply(obs_values, observation_space[sender])
                     else:
                         noisy_obs[sender] = self.noise_model.apply(obs_values)
-            return noisy_obs
+            return noisy_obs, rew, term, trunc, info
         else:
             return self.noise_model.apply(obs, observation_space), rew, term, trunc, info
 
