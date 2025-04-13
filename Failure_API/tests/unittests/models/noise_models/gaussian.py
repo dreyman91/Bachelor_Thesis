@@ -1,7 +1,7 @@
 import numpy as np
 from gymnasium import spaces
 
-from Failure_API.src.wrapper_api.models.noise_model import GaussianNoise
+from Failure_API.src.wrapper_api.noise_models.base_noise_model import GaussianNoise
 
 def test_gaussian_noise_variation_and_clipping():
     model = GaussianNoise(mean=0.0, std=0.2)

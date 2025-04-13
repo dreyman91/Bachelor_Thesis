@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
-from Failure_API.src.wrapper_api.models.communication_model import MatrixModel
-from Failure_API.src.wrapper_api.models.active_communication import ActiveCommunication
+from Failure_API.src.wrapper_api.connectivity_patterns.base_communication_model import MatrixModel
+from Failure_API.src.wrapper_api.connectivity_patterns.active_communication import ActiveCommunication
 
 
 class TestMatrixModel(unittest.TestCase):

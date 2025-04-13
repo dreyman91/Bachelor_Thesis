@@ -1,7 +1,7 @@
 import numpy as np
 from gymnasium import spaces
 
-from Failure_API.src.wrapper_api.models.noise_model import LaplacianNoise
+from Failure_API.src.wrapper_api.noise_models.base_noise_model import LaplacianNoise
 
 def test_gaussian_noise_variation_and_clipping():
     model = LaplacianNoise(scale=0.1, loc=0.4)

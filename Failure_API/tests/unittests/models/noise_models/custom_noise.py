@@ -1,7 +1,7 @@
 import numpy as np
 from gymnasium import spaces
 
-from Failure_API.src.wrapper_api.models.noise_model import CustomNoise
+from Failure_API.src.wrapper_api.noise_models.base_noise_model import CustomNoise
 def test_custom_noise():
     def noise_fn(obs, space):
         return np.clip(obs + 0.3, space.low, space.high)

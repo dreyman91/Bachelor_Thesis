@@ -1,7 +1,7 @@
 import unittest
 
-from Failure_API.src.wrapper_api.models.communication_model import DistanceModel
-from Failure_API.src.wrapper_api.models.active_communication import ActiveCommunication
+from Failure_API.src.wrapper_api.connectivity_patterns.base_communication_model import DistanceModel
+from Failure_API.src.wrapper_api.connectivity_patterns.active_communication import ActiveCommunication
 import numpy as np
 
 

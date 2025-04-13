@@ -3,7 +3,7 @@
 """
 This CommunicationFailure API functions as a wrapper for simulating communication failures
 in  multi-agent reinforcement learning (MARL) environments using the PettingZoo Framework. It allows
-the User to define various models for how communication between agents can be disrupted(e.g distanced-based,
+the User to define various communication_models for how communication between agents can be disrupted(e.g distanced-based,
 probabilistic) and how observations can be corrupted by noise(Gaussian, Laplacian). This is crucial for training
 training robust agents that can perform well under imperfect communication conditions.
 
@@ -38,11 +38,11 @@ agent observations.
     - CustomNoise: Allows User to define their own noise function.
     
 - class CommunicationFailure: The Primary or main class that applies the communication failure and noise
-models to the environment.
+communication_models to the environment.
 
 :methods
         - _update_communication: resets the communication matrix to fully connected, iterates over all failure 
-        models and applies them, then updates the matrix to reflect new communication failures.
+        communication_models and applies them, then updates the matrix to reflect new communication failures.
         
         - modify_observation: It checks if an agent is affected by communication failures. if communication is 
         blocked or affected, it applies noise distortion to the agent's observation and, returns a noisy or unmodified
@@ -61,7 +61,7 @@ models to the environment.
         - reset: The API overrides the reset method of the wrapped environment.
                 - resets the underlying environment.
                 - resets the the matrix to full connectivity
-                - updates the communication state (applies failure models)
+                - updates the communication state (applies failure communication_models)
                 - handles seeding for reproducibility.
                 - gets the initial observation for first agent, applies noise, and modifies the observation
                   based on initial communication failures.
@@ -80,7 +80,7 @@ models to the environment.
         
         - action_space: Returns the current agent's action space from the underlying environment.
         - get_communication_state: Returns a copy of the communication matrix state.
-        - add_failure_model: allows the addition of communication failure models after initialization.
+        - add_failure_model: allows the addition of communication failure communication_models after initialization.
         - set_noise_model: allows changing the noise model after initialization.            
 
 """
@@ -97,6 +97,6 @@ class BaseWrapper(BaseWrapper):
         self.rng = np.random.default_rng(seed)
 
     def reset_rng(self, seed: Optional[int] = None):
-        """Update RNG and propagate to internal models."""
+        """Update RNG and propagate to internal communication_models."""
         self.seed_val = seed
         self.rng = np.random.default_rng(seed)

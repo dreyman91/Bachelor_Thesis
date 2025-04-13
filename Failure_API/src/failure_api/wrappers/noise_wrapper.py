@@ -1,11 +1,9 @@
 import numpy as np
 from pettingzoo import AECEnv
-from gymnasium import spaces
-from typing import Optional, Any
-from abc import ABC, abstractmethod
+from typing import Optional
 from pettingzoo.utils import BaseWrapper
 
-from Failure_API.src.wrapper_api.models.noise_model import NoiseModel
+from Failure_API.src.wrapper_api.noise_models.base_noise_model import NoiseModel
 
 
 class NoiseWrapper(BaseWrapper):
@@ -25,7 +23,7 @@ class NoiseWrapper(BaseWrapper):
         if seed is not None:
             self.seed_val = seed
             self.rng = np.random.default_rng(seed)
-            self.noise_model.rng = self.rng
+            self.noise_model.set_rng(self.rng)
         return result
 
     def observe(self, agent):

@@ -6,8 +6,8 @@ import gymnasium as gym
 from pettingzoo.utils.env import AgentID, ObsType, ActionType
 from typing import Dict, Optional, Union, List, Tuple, Any, Callable, cast
 import warnings
-from Failure_API.src.wrapper_api.models.active_communication import ActiveCommunication
-from Failure_API.src.wrapper_api.models.communication_model import CommunicationModels
+from Failure_API.src.wrapper_api.connectivity_patterns.active_communication import ActiveCommunication
+from Failure_API.src.wrapper_api.connectivity_patterns.base_communication_model import CommunicationModels
 
 
 
@@ -31,7 +31,7 @@ class CommunicationWrapper(BaseWrapper):
             model.rng = self.rng
 
     def _update_communication_state(self):
-        """Update the communication matrix by applying all failure models"""
+        """Update the communication matrix by applying all failure communication_models"""
         self.comms_matrix.reset()
         for model in self.failure_models:
             model.update_connectivity(self.comms_matrix)
@@ -100,6 +100,11 @@ class CommunicationWrapper(BaseWrapper):
         raw_obs = self.env.observe(agent)
         if isinstance(raw_obs, dict):
             raw_obs = self._apply_comm_mask(raw_obs, agent)
+
+        if hasattr(self, "failure_models"):
+            for model in self.failure_models:
+                if hasattr(model, "get_corrupted_obs"):
+                    raw_obs = model.get_corrupted_obs(agent, raw_obs)
         return raw_obs
 
     def last(self, observe: bool = True):
@@ -113,6 +118,11 @@ class CommunicationWrapper(BaseWrapper):
         current_agent = self.env.agent_selection
         if isinstance(obs, dict):
             obs = self._apply_comm_mask(obs, current_agent)
+
+        if hasattr(self, "failure_models"):
+            for model in self.failure_models:
+                if hasattr(model, "get_corrupted_obs"):
+                    obs = model.get_corrupted_obs(agent, obs)
 
         return obs, rew, term, trunc, info
 

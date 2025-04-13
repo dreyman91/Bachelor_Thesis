@@ -2,11 +2,9 @@
 To test whether Noise are applied to the observations when expected, and values are within bounds.
 """
 import numpy as np
-from numpy import dtype
 from pettingzoo.utils import AECEnv
 from gymnasium import spaces
-from Failure_API.src.wrapper_api.models.noise_model import CustomNoise, GaussianNoise, LaplacianNoise
-import unittest
+from Failure_API.src.wrapper_api.noise_models.base_noise_model import CustomNoise, GaussianNoise
 
 from Failure_API.src.wrapper_api.failure_apis import NoiseWrapper
 
