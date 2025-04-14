@@ -19,6 +19,7 @@ class ContextAwareMarkovModel(CommunicationModels):
                  context_fn: Optional[Callable[[], Dict[str, float]]] = None,
                  time_fn: Optional[Callable[[], int]] = None,
                  traffic_fn: Optional[Callable[[], Dict[tuple, float]]] = None,
+                 parallel: bool = True,
                  parallel_executor: Optional[Callable] = None,
                  ):
         super().__init__()
@@ -27,7 +28,8 @@ class ContextAwareMarkovModel(CommunicationModels):
         self.context_fn = context_fn
         self.time_fn = time_fn
         self.traffic_fn = traffic_fn
-        self.parallel_executor = parallel_executor or Parallel(n_jobs=-1)
+        self.parallel = parallel
+        self.parallel_executor = Parallel(n_jobs=-1) if parallel else None
 
         # State: Lazy initialization
         self.state = defaultdict(lambda: 1)
@@ -65,8 +67,8 @@ class ContextAwareMarkovModel(CommunicationModels):
             traffic = self.traffic_fn()
             link_traffic = traffic.get((sender, receiver), 0.0)
             if link_traffic > 0.5:
-                matrix[1][0] += 0.1
-                matrix[1][1] -= 0.1
+                matrix[1][0] += 0.3
+                matrix[1][1] -= 0.3
 
         # Clamp and Normalize matrix to stay a valid probability distribution.
         matrix = np.clip(matrix, 0.0, 1.0)
@@ -97,13 +99,21 @@ class ContextAwareMarkovModel(CommunicationModels):
         Iterates through all directed sender-receiver pairs (excluding self-loops)
         and calls `_update_pair` for each using `joblib.Parallel` to potentially
         speed up computation on multicore machines.
+
         """
-        self.parallel_executor([
-            delayed(self._update_pair)(sender, receiver, comms_matrix)
-            for sender in self.agent_ids
-            for receiver in self.agent_ids
-            if sender != receiver
-        ])
+        if self.parallel_executor is not None:
+            self.parallel_executor(
+                delayed(self._update_pair)(sender, receiver, comms_matrix)
+                for sender in self.agent_ids
+                for receiver in self.agent_ids
+                if sender != receiver
+            )
+        else:
+            # Run sequentially without joblib to avoid pickling issues
+            for sender in self.agent_ids:
+                for receiver in self.agent_ids:
+                    if sender != receiver:
+                        self._update_pair(sender, receiver, comms_matrix)
 
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
