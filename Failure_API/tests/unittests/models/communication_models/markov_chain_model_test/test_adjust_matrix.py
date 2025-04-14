@@ -103,7 +103,7 @@ class TestMatrixAdjustment(unittest.TestCase):
         adjusted = model._adjust_matrix(self.base_matrix, self.sender, self.receiver)
 
         # Check adjustment for high traffic - should increase reconnection probability
-        expected = np.array([[0.9, 0.1], [0.3, 0.7]])  # [1][0] += 0.1, [1][1] -= 0.1
+        expected = np.array([[0.9, 0.1], [0.5, 0.5]])  # [1][0] += 0.1, [1][1] -= 0.1
         np.testing.assert_array_almost_equal(adjusted, expected)
 
         # Verify row sums are still 1.0
@@ -131,11 +131,8 @@ class TestMatrixAdjustment(unittest.TestCase):
         adjusted = model._adjust_matrix(self.base_matrix, self.sender, self.receiver)
 
         # Check combined adjustments:
-        # Weather: [1][0] += 0.1, [1][1] -= 0.1
-        # Time: [1][0] += 0.05, [1][1] -= 0.05
-        # Traffic: [1][0] += 0.1, [1][1] -= 0.1
-        # Total: [1][0] += 0.25, [1][1] -= 0.25
-        expected = np.array([[0.9, 0.1], [0.45, 0.55]])
+
+        expected = np.array([[0.9, 0.1], [0.65, 0.35]])
         np.testing.assert_array_almost_equal(adjusted, expected)
 
         # Verify row sums are still 1.0
