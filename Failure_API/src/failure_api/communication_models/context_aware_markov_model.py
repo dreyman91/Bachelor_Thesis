@@ -1,59 +1,50 @@
 from typing import Callable, List, Dict, Optional
 import numpy as np
 from .active_communication import ActiveCommunication
-from .base_communication_model import CommunicationModels
-from joblib import Parallel, delayed, parallel
-from collections import defaultdict
+from .base_markov_model import BaseMarkovModel
 
-class ContextAwareMarkovModel(CommunicationModels):
-    """
-    A Markov-based communication model where each communication link (sender -> receiver)
-    is governed by a 2-state Markov chain (Connected <-> Disconnected).
 
-    This model supports context-aware failure dynamics, where external factors (like weather, time, etc.)
-    or link traffic can influence transition probabilities.
+class ContextAwareMarkovModel(BaseMarkovModel):
     """
+        A context-aware extension of the base Markov model that allows for
+        transition probabilities to be modified based on external factors.
+
+        This model provides hooks for modifiers from the markov_chain_scenarios package
+        to adjust the base transition probabilities.
+        """
+
     def __init__(self,
                  agent_ids: List[str],
                  transition_probabilities: Dict[tuple[str, str], np.ndarray],
-                 context_fn: Optional[Callable[[], Dict[str, float]]] = None,
-                 time_fn: Optional[Callable[[], int]] = None,
-                 traffic_fn: Optional[Callable[[], Dict[tuple, float]]] = None,
-                 parallel: bool = True,
-                 parallel_executor: Optional[Callable] = None,
+                 modifier_functions: Optional[List[Callable[[np.ndarray, str, str], np.ndarray]]] = None
                  ):
         super().__init__()
         self.agent_ids = agent_ids
         self.transition_probabilities = transition_probabilities
-        self.context_fn = context_fn
-        self.time_fn = time_fn
-        self.traffic_fn = traffic_fn
-        self.parallel = parallel
-        self.parallel_executor = Parallel(n_jobs=-1) if parallel else None
-
-        # State: Lazy initialization
-        self.state = defaultdict(lambda: 1)
+        self.modifier_functions = modifier_functions
 
     def _adjust_matrix(self, matrix: np.ndarray, sender: str, receiver: str) -> np.ndarray:
-        """
-        Modify transition matrix based on context, time, or traffic conditions.
 
-        Args:
-        matrix: Original transition probability matrix
-        sender: Source agent ID
-        receiver: Destination agent ID
+        # Get the base matrix
+        matrix = super().get_transition_matrix(sender, receiver).copy()
 
-        Returns:
-        Modified transition probability matrix
-        """
-        matrix = matrix.copy()
+        # Apply each modifier function in sequence
+        for modifier_fn in self.modifier_functions:
+            matrix = modifier__fn(matrix, sender, receiver)
+
+        matrix = np.clip(matrix, 0.0, 1.0)
+        row_sums = matrix.sum(axis=1, keepdims=True)
+
+        # Avoid division by matrix
+        row_sums = np.where(row_sums == 0.0, 1.0, row_sums)
+        matrix = matrix / row_sums
+
+        return matrix
 
         # Context effects
         if self.context_fn:
             ctx = self.context_fn()
-            if ctx.get("weather", 0.0) > 0.5:
-                matrix[1][0] += 0.1
-                matrix[1][1] -= 0.1
+
 
         # Time dependent behavior
         if self.time_fn:
@@ -123,5 +114,3 @@ class ContextAwareMarkovModel(CommunicationModels):
         matrix = np.ones((n_agents, n_agents), dtype=bool)
         np.fill_diagonal(matrix, False)
         return matrix
-
-

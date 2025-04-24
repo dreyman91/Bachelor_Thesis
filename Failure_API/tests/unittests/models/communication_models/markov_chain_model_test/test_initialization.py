@@ -10,7 +10,7 @@ import numpy as np
 from collections import defaultdict
 from unittest.mock import patch, MagicMock
 
-from Failure_API.src.failure_api.communication_models.markov_chain_based import ContextAwareMarkovModel
+from Failure_API.src.failure_api.communication_models.context_aware_markov_model import ContextAwareMarkovModel
 from Failure_API.src.failure_api.communication_models.active_communication import ActiveCommunication
 from Failure_API.src.failure_api.communication_models.base_communication_model import CommunicationModels
 
