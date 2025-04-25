@@ -6,11 +6,11 @@ def create_weather_modifier(weather_fn: Callable[[], Dict[str, float]]) -> Calla
     """
     Creates a Modifier function that adjusts transition probabilities based on weather conditions.
 
-    :param weather_fn: returns a dictionary with weather conditions.
+    :param weather_fn: Returns a dictionary with weather conditions.
     :return: Takes a matrix, sender, snd receiver and returns a modified matrix.
     """
 
-    def weather_modifier(matrix: np.ndarray, sender: str, snd: str, receiver: str) -> np.ndarray:
+    def weather_modifier(matrix: np.ndarray, sender: str, receiver: str) -> np.ndarray:
         """
                 Modifies transition probabilities based on weather conditions.
 
@@ -36,4 +36,24 @@ def create_traffic_modifier(traffic_fn: Callable[[], Dict[tuple, float]]) -> Cal
     """
         Creates a modifier function that adjusts transition probabilities based on traffic.
     """
-    def traffic_modifier(matrix: np.ndarray, sender: str, snd: str, receiver: str) -> np.ndarray:
+    def traffic_modifier(matrix: np.ndarray, sender: str, receiver: str) -> np.ndarray:
+        matrix = matrix.copy()
+        traffic = traffic_fn()
+        link_traffic = traffic.get((sender, receiver), 0.0)
+
+        # Apply effect
+        if link_traffic > 0.5: # Higher chance of disconnection when traffic is high
+            matrix[1][0] += 0.3
+            matrix[1][1] -= 0.3
+        return matrix
+    return traffic_modifier
+
+def create_time_modifier(time_fn: Callable[[], int])-> Callable:
+    def time_modifier(matrix: np.ndarray, sender: str, receiver: str) -> np.ndarray:
+        matrix = matrix.copy()
+        time = time_fn()
+        if time % 10 == 0:
+            matrix[1][0] += 0.05
+            matrix[1][1] -= 0.05
+        return matrix
+    return time_modifier
