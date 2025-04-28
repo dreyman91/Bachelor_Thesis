@@ -24,6 +24,17 @@ class BaseMarkovModel(CommunicationModels):
         # State: Lazy initialization
         self.state = defaultdict(lambda: 1)
 
+        for key, matrix in self.transition_probabilities.items():
+            if matrix.shape != (2, 2):
+                raise ValueError(f"Transition matrix for {key} has invalid shape: {matrix.shape}. Expected (2, 2).")
+
+            if np.any(matrix < 0) or np.any(matrix > 1):
+                raise ValueError(f"Transition matrix for {key} has invalid probability values. Expected [0, 1].")
+
+            row_sums = matrix.sum(axis=1)
+            if not np.allclose(row_sums, 1.0):
+                raise ValueError(f"Invalid probability values for  {key}. Row sums must be 1.0. Got: {row_sums}")
+
     def get_transition_matrix(self, sender: str, receiver: str) -> np.ndarray:
         """
         Gets the transition probability matrix for a specific link.

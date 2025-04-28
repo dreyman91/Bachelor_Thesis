@@ -1,7 +1,8 @@
 from typing import Dict, List, Callable, Optional
 import numpy as np
-from failure_api.communication_models.context_aware_markov_model import ContextAwareMarkovModel
+from Failure_API.src.failure_api.communication_models.context_aware_markov_model import ContextAwareMarkovModel
 from .modifiers import create_time_modifier, create_traffic_modifier, create_weather_modifier
+
 
 def create_context_aware_markov_model(
         agent_ids: List[str],
@@ -9,7 +10,7 @@ def create_context_aware_markov_model(
         context_fn: Optional[Callable[[], Dict[str, float]]] = None,
         time_fn: Optional[Callable[[], Dict[tuple, float]]] = None,
         traffic_fn: Optional[Callable[[], Dict[tuple, float]]] = None,
-)-> ContextAwareMarkovModel:
+) -> ContextAwareMarkovModel:
     """
     Creates a context-aware Markov model with the specified modifiers.
 
@@ -30,4 +31,4 @@ def create_context_aware_markov_model(
     if traffic_fn:
         modifiers.append(create_traffic_modifier(traffic_fn))
 
-    return ContextAwareMarkovModel(agent_ids, trasition_probabilities, modifiers)
+    return ContextAwareMarkovModel(agent_ids, transition_probabilities, modifiers)

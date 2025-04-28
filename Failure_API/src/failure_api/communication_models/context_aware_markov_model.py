@@ -1,7 +1,7 @@
 from typing import Callable, List, Dict, Optional
 import numpy as np
-from failure_api.communication_models.active_communication import ActiveCommunication
-from failure_api.communication_models.base_markov_model import BaseMarkovModel
+from Failure_API.src.failure_api.communication_models.active_communication import ActiveCommunication
+from Failure_API.src.failure_api.communication_models.base_markov_model import BaseMarkovModel
 
 
 class ContextAwareMarkovModel(BaseMarkovModel):
@@ -30,7 +30,6 @@ class ContextAwareMarkovModel(BaseMarkovModel):
         for modifier_fn in self.modifier_functions:
             matrix = modifier_fn(matrix, sender, receiver)
 
-        matrix = np.clip(matrix, 0.0, 1.0)
         row_sums = matrix.sum(axis=1, keepdims=True)
 
         # Avoid division by matrix
