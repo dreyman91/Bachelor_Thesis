@@ -1,14 +1,9 @@
-from pettingzoo.utils import BaseWrapper
+from pettingzoo.utils.wrappers import BaseWrapper
 from pettingzoo import AECEnv
-from gymnasium import spaces
 import numpy as np
-import gymnasium as gym
-from pettingzoo.utils.env import AgentID, ObsType, ActionType
-from typing import Dict, Optional, Union, List, Tuple, Any, Callable, cast
-import warnings
-from Failure_API.src.wrapper_api.connectivity_patterns.active_communication import ActiveCommunication
-from Failure_API.src.wrapper_api.connectivity_patterns.base_communication_model import CommunicationModels
-
+from typing import Optional, List, Any
+from Failure_API.src.failure_api.communication_models.active_communication import ActiveCommunication
+from Failure_API.src.failure_api.communication_models.base_communication_model import CommunicationModels
 
 
 class CommunicationWrapper(BaseWrapper):
@@ -58,7 +53,7 @@ class CommunicationWrapper(BaseWrapper):
                 return 0
         return action
 
-    def _apply_comm_mask(self,  obs: dict, receiver: str)->dict:
+    def _apply_comm_mask(self, obs: dict, receiver: str) -> dict:
         """
         Masks the part of the Obs dictionary that the receiver
         should not see based on the communication matrix.

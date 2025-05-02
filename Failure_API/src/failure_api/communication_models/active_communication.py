@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Dict, Optional, Union, List, Tuple, Any, Callable
 
+
 class ActiveCommunication:
     """Represents the actual communication state between agents as a bandwidth matrix.
 
@@ -19,7 +20,9 @@ class ActiveCommunication:
             self._validate_matrix(initial_matrix, num_agents)
             self.matrix = initial_matrix.astype(bool)
         else:
-            self.matrix = np.ones((num_agents, num_agents), dtype=float)
+            matrix = np.ones((num_agents, num_agents), dtype=float)
+            np.fill_diagonal(matrix, 0.0)  # Disable self-communication
+            self.matrix = matrix
 
     @staticmethod
     def _validate_matrix(matrix, num_agents):
@@ -59,7 +62,6 @@ class ActiveCommunication:
         Returns a boolean matrix indicating connectivity for each pair using the given threshold.
         """
         return (self.matrix > threshold).astype(bool)
-
 
     def get_blocked_agents(self, agent: str) -> List[str]:
         """ Returns a list of agents that cannot communicate with the given agent under the thresholded logic."""

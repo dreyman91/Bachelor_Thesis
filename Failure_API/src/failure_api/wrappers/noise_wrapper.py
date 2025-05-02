@@ -1,7 +1,7 @@
 import numpy as np
 from pettingzoo import AECEnv
 from typing import Optional
-from pettingzoo.utils import BaseWrapper
+from pettingzoo.utils.wrappers import BaseWrapper
 
 from Failure_API.src.wrapper_api.noise_models.base_noise_model import NoiseModel
 
@@ -18,7 +18,7 @@ class NoiseWrapper(BaseWrapper):
         self.noise_model.rng = self.rng
 
     def reset(self, seed=None, options=None):
-        """ Reset the environment and update seed for noise model."""
+        """ Reset the environment and update seed for a noise model."""
         result = self.env.reset(seed=seed, options=options)
         if seed is not None:
             self.seed_val = seed

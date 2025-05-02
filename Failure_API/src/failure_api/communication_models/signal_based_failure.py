@@ -5,18 +5,19 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 
-
 class SignalBasedModel(CommunicationModels):
     """
-    A communication model that simulates realistic wireless signal propagation.
+     A physics-based model for wireless signal propagation between agents.
 
-    This model determines connectivity between agents based on:
-    1. Physical distance between agents (using inverse-square law for signal attenuation)
-    2. Probabilistic packet loss that increases with distance
-    3. Configurable transmission power and minimum signal thresholds
+    This model simulates realistic wireless communication by:
+    1. Calculating signal strength based on physical distance using inverse-square law
+    2. Applying signal strength thresholds for minimal connectivity
+    3. Modeling probabilistic packet loss that increases with distance
+    4. Using spatial indexing for computational efficiency
 
-    Optimized for real-time applications using spatial indexing (KD-Tree) to efficiently
-    compute agent proximity relationships.
+    The model is based on fundamental principles of electromagnetic wave propagation,
+    making it suitable for research on wireless networks, robot swarms, sensor networks,
+    and other systems with physical communication constraints.
     """
 
     def __init__(self,
@@ -37,6 +38,9 @@ class SignalBasedModel(CommunicationModels):
             dropout_alpha: Controls how quickly probability of packet loss increases with distance
                            (higher values = more aggressive dropout with distance)
         """
+
+        super().__init__()
+
         if not isinstance(agent_ids, list) or not all(isinstance(a, str) for a in agent_ids):
             raise TypeError("agent_ids must be a list of strings.")
 
@@ -52,78 +56,123 @@ class SignalBasedModel(CommunicationModels):
         if not isinstance(dropout_alpha, (float, int)):
             raise TypeError("dropout_alpha must be a float.")
 
-        super().__init__()
         self.agent_ids = agent_ids
         self.pos_fn = pos_fn
         self.tx_power = tx_power
         self.min_strength = min_strength
         self.dropout_alpha = dropout_alpha
+
+        # Creating mapping from agent IDs to indices
         self.id_to_idx = {aid: i for i, aid in enumerate(agent_ids)}
 
-    def _signal_strength(self, dist: float)-> float:
+    def calculate_signal_strength(self, sender_pos: np.ndarray, receiver_pos: np.ndarray) -> float:
         """
-        Calculate signal strength between two agents based on distance.
+        Calculate signal strength between two agents based on their positions.
 
-        Uses the inverse-square law with a small softening term to prevent division by zero.
-        Signal strength = transmit_power / (distance² + epsilon)
+        Implements the inverse-square law of electromagnetic radiation:
+        signal_strength = tx_power / (distance² + ε)
 
-        :param dist: Euclidean distance between sender and receiver
-        :return: The calculated signal strength (higher = stronger connection)
+        Where ε is a small constant to prevent division by zero when
+        agents are at the exact same position.
         """
+        # Calculate euclidean distance between the agents
+        distance = float(np.linalg.norm(sender_pos - receiver_pos))
 
-        return self.tx_power / (dist**2 + 1e-6)
+        # Apply inverse square law with small epsilon to prevent division by zero
+        return self.tx_power / (distance ** 2 + 1e-6)
+
+    def calculate_packet_success_probability(self, distance: float) -> float:
+        """
+        Calculate the probability of successful packet transmission based on distance.
+
+        Uses an exponential decay model: p_success = exp(-α * distance)
+
+        Parameters:
+        distance : Distance between sender and receiver
+
+        Returns: Probability of successful packet transmission (0.0 to 1.0)
+        """
+        return np.exp(-self.dropout_alpha * distance)
 
     def update_connectivity(self, comms_matrix: ActiveCommunication):
         """
-                Update the connectivity matrix based on current agent positions and signal parameters.
+        Update the connectivity matrix based on current agent positions and signal parameters.
 
-                This method:
-                1. Gets current positions of all agents
-                2. Builds a KD-Tree for efficient spatial querying
-                3. For each sender-receiver pair:
-                   a. Calculates signal strength based on distance
-                   b. Determines if signal strength exceeds minimum threshold
-                   c. Applies probabilistic packet loss (more likely at greater distances)
-                   d. Updates the connectivity matrix accordingly
+        This method:
+        1. Gets current positions of all agents
+        2. Builds a KD-Tree for efficient spatial querying
+        3. For each sender-receiver pair:
+           a. Calculates signal strength based on distance
+           b. Determines if signal strength exceeds minimum threshold
+           c. Applies probabilistic packet loss (more likely at greater distances)
+           d. Updates the connectivity matrix accordingly
 
-                Args:
-                    comms_matrix: The connectivity matrix to update
-                """
+        Args:
+            comms_matrix: The connectivity matrix to update
+        """
+
+        # Get current positions of all agents
         positions = self.pos_fn()
+
+        #  Extract position coordinates as numpy array for KD-Tree
         coords = np.array([positions[aid] for aid in self.agent_ids])
 
-        # guard clause
-        if  coords.size == 0:
+        # guard clause if no valid positions
+        if coords.size == 0:
             return
+
+        # Build KD-Tree for efficient spatial querie
         tree = cKDTree(coords)
 
+        # Update connectivity for each pair
         for i, sender in enumerate(self.agent_ids):
             sender_pos = positions[sender]
+
+            # find all neighbors
             _, neighbors = tree.query(sender_pos, k=len(self.agent_ids))
+
+            # Convert to list if only one neighbor
             if isinstance(neighbors, (int, np.integer)):
                 neighbors = [neighbors]
             else:
                 neighbors = neighbors.tolist()
 
+            # Process each neighbor
             for j in neighbors:
                 receiver = self.agent_ids[j]
+
+                # Skip self-connections
                 if sender == receiver:
                     continue
 
-                dist = float(np.linalg.norm(positions[sender] - positions[receiver]))
-                strength = self._signal_strength(dist)
+                # Get receiver position
+                receiver_pos = positions.get(receiver)
+                if receiver_pos is None:
+                    continue
 
+                # Calculate distance between agents
+                distance = float(np.linalg.norm(sender_pos - receiver_pos))
+
+                # Calculate signal strength
+                strength = self.calculate_signal_strength(sender_pos, receiver_pos)
+
+                # Check if signal meets a minimum threshold
                 if strength < self.min_strength:
                     comms_matrix.update(sender, receiver, False)
                     continue
 
-                p_success = np.exp(-self.dropout_alpha * dist)
+                # Calculate the probability of successful transmission
+                p_success = self.calculate_packet_success_probability(distance)
+
+                # Determine if transmission succeeds
                 success = self.rng.random() < p_success
 
+                # Update connectivity matrix
                 comms_matrix.update(sender, receiver, success)
 
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
+        """ Create an initial connectivity matrix with all agents connected except to themselves."""
         n = len(agent_ids)
         matrix = np.ones((n, n))
         np.fill_diagonal(matrix, 0.0)

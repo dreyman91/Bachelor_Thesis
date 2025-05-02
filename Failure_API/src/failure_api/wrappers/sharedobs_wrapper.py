@@ -1,5 +1,6 @@
-from pettingzoo.utils import BaseWrapper
+from pettingzoo.utils.wrappers import BaseWrapper
 from gymnasium import spaces
+
 
 class SharedObsWrapper(BaseWrapper):
     def __init__(self, env):
@@ -10,7 +11,7 @@ class SharedObsWrapper(BaseWrapper):
         return {
             other_agent: self.env.observe(other_agent)
             for other_agent in self.agents
-            if other_agent in self.env.agents # Only active agents
+            if other_agent in self.env.agents  # Only active agents
         }
 
     def last(self, observe: bool = True):
