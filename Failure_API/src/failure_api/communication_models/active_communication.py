@@ -40,7 +40,14 @@ class ActiveCommunication:
         """
         sender_idx = self.agent_id_to_index[sender]
         receiver_idx = self.agent_id_to_index[receiver]
-        self.matrix[sender_idx, receiver_idx] = float(bandwidth)
+
+        # Ensure conversion from boolean to float
+        if isinstance(bandwidth, bool):
+            bandwidth_value = 1.0 if bandwidth else 0.0
+        else:
+            bandwidth_value = float(bandwidth)
+
+        self.matrix[sender_idx][receiver_idx] = bandwidth_value
 
     def get_bandwidth(self, sender: str, receiver: str) -> float:
         """

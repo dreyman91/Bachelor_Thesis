@@ -39,13 +39,16 @@ class DelayBasedModel(CommunicationModels):
         super().__init__()
 
         if min_delay < 0 or max_delay < 0:
-            warnings.warn("Negative delay values are invalid. Clipping to 0.", UserWarning)
+            raise Warning("Negative delay values are invalid. Clipping to 0.", UserWarning)
             min_delay = max(min_delay, 0)
             max_delay = max(max_delay, 0)
 
         if min_delay > max_delay:
-            warnings.warn("min_delay > max_delay, values will be swapped.", UserWarning)
+            raise Warning("min_delay > max_delay, values will be swapped.", UserWarning)
             min_delay, max_delay = max_delay, min_delay
+
+        if message_drop_probability < 0 or message_drop_probability > 1:
+            raise ValueError("message_drop_probability must be between 0 and 1.")
 
         self.agent_ids = agent_ids
         self.min_delay = min_delay
@@ -72,53 +75,72 @@ class DelayBasedModel(CommunicationModels):
         :return: Delay value in time steps
         """
 
-        return self.rng.integers(self.min_delay, self.max_delay + 1)
+        return self.rng.randint(self.min_delay, self.max_delay + 1)
 
     def _insert_message(self, sender_idx: int, receiver_idx: int):
         """ Inserts a new message in the queue for the specified pair"""
 
-        sender_id = self.agent_ids[sender_idx]
-        receiver_id = self.agent_ids[receiver_idx]
+        sender = self.agent_ids[sender_idx]
+        receiver = self.agent_ids[receiver_idx]
 
         # Generate delay for this message
-        delay = self._generate_delay(sender_id, receiver_id)
+        delay = self.rng.randint(self.min_delay, self.max_delay + 1)
 
+        # Success flag (1.0 for success and, 0.0 for fail)
         success_flag = 1.0 if self.rng.random() > self.message_drop_probability else 0.0
 
-        # Add message to the queue
-        if (sender_id, receiver_id) not in self.message_queues:
-            self.message_queues[(sender_id, receiver_id)] = deque()
-        self.message_queues[(sender_id, receiver_id)].append((delay, success_flag))
+        # Add a message to the queue
+        key = (sender, receiver)
+        if key not in self.message_queues:
+            self.message_queues[key] = deque()
 
-    def update_connectivity(self, comms_matrix: ActiveCommunication):
+        self.message_queues[key].append((delay, success_flag))
+
+    def process_existing_messages(self, comms_matrix):
         """
-        Update connectivity matrix based on message queues and timing.
+        Process existing message queues, deliver expired messages.
 
         This method:
         1. Decrements delay counters for all queued messages
         2. Applies released messages (with delay <= 0) to update the connectivity matrix
-        3. Inserts new messages into queues based on current connectivity state
+        3. Keeps delayed messages in their queues
         """
-        # 1. Process existing messages: Decrement delay counters and apply released messages
         for (s, r), queue in list(self.message_queues.items()):
-            queue = self.message_queues[(s, r)]
             new_queue = deque()
+            messages_to_deliver = []
             while queue:
                 delay_left, success_flag = queue.popleft()
                 delay_left -= 1
 
                 if delay_left <= 0:
-                    comms_matrix.update(s, r, success_flag)
-                elif delay_left <= self.max_delay:
-                    new_queue.append((delay_left, success_flag))  # keep alive
+                    # Collect messages to deliver after processing the queue
+                    messages_to_deliver.append(success_flag)
+                else:
+                    # Message still delayed
+                    new_queue.append((delay_left, success_flag))
+                    comms_matrix.update(s, r, 0.0)  # Keep link inactive while delayed
+
+            # Deliver messages after processing the queue
+            for success_flag in messages_to_deliver:
+                comms_matrix.update(s, r, float(success_flag))
 
             # Update or clear queue
             if new_queue:
-                self.message_queues[(s, r)] = new_queue  # else drop
+                self.message_queues[(s, r)] = new_queue
             else:
+                # Remove the queue completely if its empty
+                # Regardless of whether it is delivered or not
                 self.message_queues.pop((s, r), None)
 
-        # 2. Insert new messages into queues based on current connectivity
+    def queue_new_messages(self, comms_matrix):
+        """
+        Queue new messages based on current connectivity.
+
+        This method:
+        1. Checks which links are currently active
+        2. Queues new messages for these links
+        3. Sets links to inactive while messages are delayed
+        """
         for s_idx, sender in enumerate(self.agent_ids):
             for r_idx, receiver in enumerate(self.agent_ids):
                 if sender == receiver:
@@ -126,9 +148,33 @@ class DelayBasedModel(CommunicationModels):
 
                 # Check if communication is enabled
                 if comms_matrix.matrix[s_idx, r_idx] > 0:
-                    if self.rng.random() < comms_matrix.matrix[s_idx, r_idx]:
+                    # Determine if a message should be dropped
+                    if self.rng.random() < self.message_drop_probability:
+                        # Message dropped - set link to inactive
+                        comms_matrix.update(self.agent_ids[s_idx], self.agent_ids[r_idx], 0.0)
+                    else:
+                        # Queue new message
                         self._insert_message(s_idx, r_idx)
+                        # Set link to inactive while message is delayed
+                        comms_matrix.update(self.agent_ids[s_idx], self.agent_ids[r_idx], 0.0)
 
+    def update_connectivity(self, comms_matrix, process_only=False, queue_only=False):
+        """
+        Update connectivity matrix based on message queues and timing.
+
+        This method orchestrates the message lifecycle by calling the specialized
+        processing methods in the appropriate order.
+
+        Args:
+            comms_matrix: The communication matrix to update
+            process_only: Only process existing messages, don't queue new ones
+            queue_only: Only queue new messages, don't process existing ones
+        """
+        if not queue_only:
+            self.process_existing_messages(comms_matrix)
+
+        if not process_only:
+            self.queue_new_messages(comms_matrix)
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
         n = len(agent_ids)

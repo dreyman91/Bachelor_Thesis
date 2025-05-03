@@ -2,9 +2,6 @@ import numpy as np
 from typing import List, Dict, Callable, Any
 from .active_communication import ActiveCommunication
 from .base_communication_model import CommunicationModels
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class DistanceModel(CommunicationModels):
@@ -33,11 +30,11 @@ class DistanceModel(CommunicationModels):
 
         # Parameter validation
         if distance_threshold <= 0.0:
-            logger.warning("Distance threshold must be greater than zero")
+            raise ValueError("Distance threshold must be greater than zero")
         if not 0 <= failure_prob <= 1.0:
-            logger.warning("Failure probability must be between 0 and 1")
+            raise ValueError("Failure probability must be between 0 and 1")
         if max_bandwidth <= 0.0:
-            logger.warning("Bandwidth must be greater than zero")
+            raise ValueError("Bandwidth must be greater than zero")
 
         self.agent_ids = agent_ids
         self.distance_threshold = distance_threshold
@@ -94,17 +91,17 @@ class DistanceModel(CommunicationModels):
         positions = self.pos_fn()
 
         # Update connectivity for each agent pair
-        for sender in self.agent_ids:
-            sender_pos = positions.get(sender)
-            if sender_pos is None:
-                continue
-
-            for receiver in self.agent_ids:
+        for sender in sorted(self.agent_ids):
+            for receiver in sorted(self.agent_ids):
                 if sender == receiver:
                     continue
 
+                sender_pos = positions.get(sender)
                 receiver_pos = positions.get(receiver)
-                if receiver_pos is None:
+
+                # If either position is missing, set Bandwidth to 0.0
+                if sender_pos is None or receiver_pos is None:
+                    comms_matrix.update(sender, receiver, 0.0)
                     continue
 
                 # Calculate distance

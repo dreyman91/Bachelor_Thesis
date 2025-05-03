@@ -2,9 +2,6 @@ import numpy as np
 from typing import Optional, Any, Dict, Union
 from gymnasium import spaces
 from ..noise_models.base_noise_model import NoiseModel
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class LaplacianNoiseModel(NoiseModel):
@@ -27,6 +24,10 @@ class LaplacianNoiseModel(NoiseModel):
     """
 
     def __init__(self, loc: float = 0.0, scale: float = 0.1):
+
+        if scale <= 0:
+            raise ValueError("scale must be positive")
+
         super().__init__()
         self.loc = loc
         self.scale = scale
@@ -39,9 +40,9 @@ class LaplacianNoiseModel(NoiseModel):
         :return:  Observation with added Laplacian noise
         """
         if self.rng is None:
-            logger.warning("Random number generator not initialized. call set_rng() first.")
+            raise ValueError("Random number generator not initialized.")
         if isinstance(obs, np.ndarray):
-            self._apply_to_array(obs, observation_space)
+            return self._apply_to_array(obs, observation_space)
         elif isinstance(obs, dict):
             return self._apply_to_dict(obs, observation_space)
         elif isinstance(obs, (int, float, np.integer, np.floating)):
@@ -83,9 +84,11 @@ class LaplacianNoiseModel(NoiseModel):
         noisy_obs = {}
 
         for key, value in dict_obs.items():
-            # Get space for this key if available
+            # Get keyspace if available
             key_space = None
-            if dict_space is not None and key in dict_space:
+            if dict_space is not None and isinstance(dict_space, spaces.Dict) and key in dict_space.spaces:
+                key_space = dict_space.spaces[key]
+            elif dict_space is not None and isinstance(dict_space, spaces.Dict) and key in dict_space:
                 key_space = dict_space[key]
 
             # Apply noise based on value type

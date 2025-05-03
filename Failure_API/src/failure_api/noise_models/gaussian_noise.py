@@ -2,9 +2,6 @@ import numpy as np
 from typing import Optional, Any, Callable, Dict, Union, Tuple
 from gymnasium import spaces
 from ..noise_models.base_noise_model import NoiseModel
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class GaussianNoiseModel(NoiseModel):
@@ -53,9 +50,9 @@ class GaussianNoiseModel(NoiseModel):
         Returns: Observation with added Gaussian noise
         """
         if self.rng is None:
-            logger.warning("Random number generator not initialized. call set_rng() first.")
+            raise ValueError("Random number generator not initialized.")
         if isinstance(obs, np.ndarray):
-            self._apply_to_array(obs, observation_space)
+            return self._apply_to_array(obs, observation_space)
         elif isinstance(obs, dict):
             return self._apply_to_dict(obs, observation_space)
         elif isinstance(obs, (int, float, np.integer, np.floating)):
@@ -100,7 +97,9 @@ class GaussianNoiseModel(NoiseModel):
         for key, value in dict_obs.items():
             # Get space key if available
             key_space = None
-            if dict_space is not None and key in dict_space:
+            if dict_space is not None and isinstance(dict_space, spaces.Dict) and key in dict_space.spaces:
+                key_space = dict_space.spaces[key]
+            elif dict_space is not None and isinstance(dict_space, dict) and key in dict_space:
                 key_space = dict_space[key]
 
             # Apply noise based on value type

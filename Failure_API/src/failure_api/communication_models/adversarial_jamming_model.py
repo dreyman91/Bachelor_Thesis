@@ -25,6 +25,9 @@ class BaseJammingModel(CommunicationModels):
             If False, jamming degrades communication quality using noise_strength
         noise_strength : When full_block is False, the value to set for degraded connections
         """
+        if  noise_strength < 0.0:
+            raise ValueError("noise_strength must be non-negative.")
+
         super().__init__()
         self.agent_ids = agent_ids
         self.full_block = full_block
@@ -33,6 +36,13 @@ class BaseJammingModel(CommunicationModels):
         # State tracking
         self.jamming_state = defaultdict(lambda: False)
         self.jamming_log = defaultdict(list)
+
+    def _build_context(self)-> Dict[str, Any]:
+        """
+        Build the current context dictionary for jamming decisions.
+        :return: Dictionary containing relevant state information.
+        """
+        return {}
 
     def is_jammed(self, sender: str, receiver: str, context: Dict[str, Any]) -> bool:
         """
@@ -74,7 +84,7 @@ class BaseJammingModel(CommunicationModels):
                     continue
 
                 # Check if link is jammed
-                jam_result = self.is_jammed(sender, receiver)
+                jam_result = self.is_jammed(sender, receiver, context)
 
                 if jam_result:
                     # Update communication matrix based on jamming type
@@ -91,8 +101,7 @@ class BaseJammingModel(CommunicationModels):
 
                     # Log jams if time information is available
                     if 'time' in context:
-                        self.jamming_log[(sender, receiver)].append(context(['time'])
-                                                                    )
+                        self.jamming_log[(sender, receiver)].append(context['time'])
 
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:

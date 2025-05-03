@@ -47,14 +47,14 @@ class SignalBasedModel(CommunicationModels):
         if not callable(pos_fn):
             raise TypeError("pos_fn must be a callable.")
 
-        if not isinstance(tx_power, (float, int)):
-            raise TypeError("tx_power must be a float.")
+        if not isinstance(tx_power, (float, int)) or tx_power <= 0:
+            raise TypeError("tx_power must be a positive number.")
 
-        if not isinstance(min_strength, (float, int)):
-            raise TypeError("min_strength must be a float.")
+        if not isinstance(min_strength, (float, int)) or min_strength < 0:
+            raise TypeError("min_strength must be a non-negative number.")
 
-        if not isinstance(dropout_alpha, (float, int)):
-            raise TypeError("dropout_alpha must be a float.")
+        if not isinstance(dropout_alpha, (float, int)) or dropout_alpha < 0:
+            raise TypeError("dropout_alpha must be a non-negative number.")
 
         self.agent_ids = agent_ids
         self.pos_fn = pos_fn
@@ -114,7 +114,17 @@ class SignalBasedModel(CommunicationModels):
         # Get current positions of all agents
         positions = self.pos_fn()
 
-        #  Extract position coordinates as numpy array for KD-Tree
+        # Get valid positions
+        valid_positions = {aid: positions[aid] for aid in self.agent_ids if aid in positions}
+        if not valid_positions:
+            # Set all off-diagonal links to 0.0 (disconnected) if no valid positions
+            for sender in self.agent_ids:
+                for receiver in self.agent_ids:
+                    if sender != receiver:
+                        comms_matrix.update(sender, receiver, 0.0)
+            return
+
+        #  Extract position coordinates as a numpy array for KD-Tree
         coords = np.array([positions[aid] for aid in self.agent_ids])
 
         # guard clause if no valid positions
@@ -126,7 +136,14 @@ class SignalBasedModel(CommunicationModels):
 
         # Update connectivity for each pair
         for i, sender in enumerate(self.agent_ids):
-            sender_pos = positions[sender]
+
+            sender_pos = positions.get(sender)
+            if sender_pos is None:
+                # If sender has no position, mark all its outgoing connections as failed
+                for receiver in self.agent_ids:
+                    if receiver != sender:
+                        comms_matrix.update (sender, receiver, 0.0)
+                continue # Skip to next sender
 
             # find all neighbors
             _, neighbors = tree.query(sender_pos, k=len(self.agent_ids))
@@ -157,7 +174,7 @@ class SignalBasedModel(CommunicationModels):
                 strength = self.calculate_signal_strength(sender_pos, receiver_pos)
 
                 # Check if signal meets a minimum threshold
-                if strength < self.min_strength:
+                if strength < self.min_strength - 1e-8:
                     comms_matrix.update(sender, receiver, False)
                     continue
 
