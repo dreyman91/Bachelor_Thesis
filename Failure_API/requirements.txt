@@ -12,3 +12,7 @@ matplotlib
 black
 isort
 mpe2
+
+
+# for testing with wrapped environment
+pymunk

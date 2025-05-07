@@ -63,6 +63,11 @@ class ProbabilisticModel(CommunicationModels):
                 # Update matrix
                 comms_matrix.update(sender, receiver, bandwidth)
 
+        print("[DEBUG] Final communication matrix from ProbabilisticModel:")
+        print(comms_matrix.get_state().astype(int))
+
+        if self.failure_prob == 0.0:
+            assert np.all(comms_matrix.get_state()), "[BUG] Failure at p=0.0"
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
         """

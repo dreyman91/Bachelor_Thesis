@@ -1,12 +1,22 @@
 from pettingzoo.utils.wrappers import BaseWrapper
-from pettingzoo import AECEnv
+from pettingzoo.utils.env import AgentID, AECEnv, ActionType, ObsType
 import numpy as np
+from gymnasium import spaces
 from typing import Optional, List, Any
 from Failure_API.src.failure_api.communication_models.active_communication import ActiveCommunication
 from Failure_API.src.failure_api.communication_models.base_communication_model import CommunicationModels
+from Failure_API.src.failure_api.communication_models.probabilistic_model import ProbabilisticModel
+
 
 
 class CommunicationWrapper(BaseWrapper):
+    """
+    A wrapper for PettingZoo environments that simulates communication failures between agents.
+
+    This wrapper applies various communication failure models to control which agents can
+    communicate with each other, and how their observations and actions are affected by
+    communication constraints.
+    """
     def __init__(self,
                  env: AECEnv[AgentID, ActionType, ObsType],
                  failure_models: List[CommunicationModels] = None,
@@ -25,14 +35,35 @@ class CommunicationWrapper(BaseWrapper):
         for model in self.failure_models:
             model.rng = self.rng
 
+        if failure_models is None:
+            raise ValueError("No failure model(s) provided.")
+        elif isinstance(failure_models, list):
+            self.failure_models = failure_models
+        else:
+            self.failure_models = [failure_models]
+
     def _update_communication_state(self):
-        """Update the communication matrix by applying all failure communication_models"""
+        """
+        Update the communication matrix by applying all failure models.
+
+        This internal method applies each failure model in sequence to the communication matrix,
+        determining which agents can communicate with each other for the current step.
+        """
         self.comms_matrix.reset()
         for model in self.failure_models:
             model.update_connectivity(self.comms_matrix)
 
     def filter_action(self, agent: str, action: Any) -> Any:
-        """Filter an Agent's action if it cannot communicate with others. """
+        """
+        Filter an agent's action if it cannot communicate with others.
+
+        If an agent cannot communicate with any other agent, its action is replaced
+        with a no-operation action appropriate for the action space.
+
+        :param agent: The ID of the agent whose action is being filtered.
+        :param action: The original action proposed by the agent.
+        :return: Either the original action if communication is possible, or a no-op action if not.
+        """
 
         can_send = any(
             self.comms_matrix.can_communicate(agent, receiver)
@@ -55,9 +86,22 @@ class CommunicationWrapper(BaseWrapper):
 
     def _apply_comm_mask(self, obs: dict, receiver: str) -> dict:
         """
-        Masks the part of the Obs dictionary that the receiver
+        Masks the part of the observation dictionary that the receiver
         should not see based on the communication matrix.
+
+        :param obs: The original observation dictionary.
+        :param receiver: The ID of the agent receiving the observation.
+        :return: The masked observation dictionary where information from agents that cannot
+            communicate with the receiver is zeroed out.
         """
+        # Early exit if agents can communicate with receiver
+        if all(
+            self.comms_matrix.can_communicate(sender, receiver) or sender == receiver
+            for sender in self.agent_ids
+        ):
+            return obs
+
+        # Otherwise, apply masking
         for sender in self.agent_ids:
             if sender != receiver and not self.comms_matrix.can_communicate(
                     sender, receiver
@@ -92,7 +136,10 @@ class CommunicationWrapper(BaseWrapper):
         return result
 
     def observe(self, agent: str):
+
+        self._update_communication_state()
         raw_obs = self.env.observe(agent)
+
         if isinstance(raw_obs, dict):
             raw_obs = self._apply_comm_mask(raw_obs, agent)
 
@@ -100,9 +147,13 @@ class CommunicationWrapper(BaseWrapper):
             for model in self.failure_models:
                 if hasattr(model, "get_corrupted_obs"):
                     raw_obs = model.get_corrupted_obs(agent, raw_obs)
+
         return raw_obs
 
     def last(self, observe: bool = True):
+
+        self._update_communication_state()
+
         agent = self.env.agent_selection
         if agent not in self.env.agents:
             return None, 0.0, True, False, {}
@@ -122,6 +173,7 @@ class CommunicationWrapper(BaseWrapper):
         return obs, rew, term, trunc, info
 
     def get_communication_state(self):
+
         return self.comms_matrix.get_state()
 
     def add_failure_model(self, model: CommunicationModels):

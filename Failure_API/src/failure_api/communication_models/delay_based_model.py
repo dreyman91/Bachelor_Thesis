@@ -54,6 +54,7 @@ class DelayBasedModel(CommunicationModels):
         self.min_delay = min_delay
         self.max_delay = max_delay
         self.message_drop_probability = message_drop_probability
+        self.timestep = 0
 
         # Message queues: (sender, receiver) -> deque of (delay_left, success_flag)
         self.message_queues = defaultdict(deque)
@@ -84,7 +85,8 @@ class DelayBasedModel(CommunicationModels):
         receiver = self.agent_ids[receiver_idx]
 
         # Generate delay for this message
-        delay = self.rng.randint(self.min_delay, self.max_delay + 1)
+        delay = self.rng.integers(
+            self.min_delay, self.max_delay + 1)
 
         # Success flag (1.0 for success and, 0.0 for fail)
         success_flag = 1.0 if self.rng.random() > self.message_drop_probability else 0.0
@@ -170,11 +172,14 @@ class DelayBasedModel(CommunicationModels):
             process_only: Only process existing messages, don't queue new ones
             queue_only: Only queue new messages, don't process existing ones
         """
+        if not process_only:
+            self.queue_new_messages(comms_matrix)
+
         if not queue_only:
             self.process_existing_messages(comms_matrix)
 
-        if not process_only:
-            self.queue_new_messages(comms_matrix)
+        self.timestep += 1
+
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
         n = len(agent_ids)

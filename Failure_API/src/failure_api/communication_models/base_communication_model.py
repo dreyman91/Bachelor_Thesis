@@ -1,14 +1,13 @@
 import numpy as np
 from typing import List, Optional, Callable
 from abc import ABC, abstractmethod
-import warnings
 from .active_communication import ActiveCommunication
 
 
 class CommunicationModels(ABC):
     """Abstract base class for communication communication_models."""
 
-    def __init__(self, seed: Optional[int] = 42, rng=None, parallel_executor: Optional[Callable] = None):
+    def __init__(self, seed: Optional[int] = 42, rng=None,):
         self.rng = rng if rng is not None else np.random.default_rng(seed)
 
     def set_rng(self, rng):
