@@ -61,13 +61,17 @@ class BaseJammingModel(CommunicationModels):
         """ Apply jamming effects to an agent's observations."""
         if not self.full_block and self.noise_strength > 0.0:
             noisy_obs = {}
+            context = self._build_context()
             for sender, val in obs.items():
                 if sender == agent:
                     noisy_obs[sender] = val
                 else:
-                    if isinstance(val, np.ndarray):
-                        noise = self.rng.normal(0, self.noise_strength, val.shape)
-                        noisy_obs[sender] = val + noise
+                    if self.is_jammed(sender, agent, context):
+                        if isinstance(val, np.ndarray):
+                            noise = self.rng.normal(0, self.noise_strength, val.shape)
+                            noisy_obs[sender] = val + noise
+                        else:
+                            noisy_obs[sender] = val
                     else:
                         noisy_obs[sender] = val
             return noisy_obs

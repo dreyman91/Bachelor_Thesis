@@ -12,7 +12,7 @@ class CommunicationModels(ABC):
 
     def set_rng(self, rng):
         """
-        Set the shared RNG from the wrapper
+        Set the shared RNG from the wrapper<<
         """
         self.rng = rng
 

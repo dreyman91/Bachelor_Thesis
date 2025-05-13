@@ -3,7 +3,7 @@ from pettingzoo import AECEnv
 from typing import Optional
 from pettingzoo.utils.wrappers import BaseWrapper
 
-from Failure_API.src.wrapper_api.noise_models.base_noise_model import NoiseModel
+from Failure_API.src.failure_api.noise_models.base_noise_model import NoiseModel
 
 
 class NoiseWrapper(BaseWrapper):
@@ -30,6 +30,8 @@ class NoiseWrapper(BaseWrapper):
         """Apply noise to the observation of other_agents."""
         raw_obs = self.env.observe(agent)
         observation_space = self.env.observation_space(agent)
+
+
 
         if isinstance(raw_obs, dict):
             noisy_obs = {}

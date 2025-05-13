@@ -6,6 +6,7 @@ from typing import Optional, List, Any
 from Failure_API.src.failure_api.communication_models.active_communication import ActiveCommunication
 from Failure_API.src.failure_api.communication_models.base_communication_model import CommunicationModels
 from Failure_API.src.failure_api.communication_models.probabilistic_model import ProbabilisticModel
+from Failure_API.src.failure_api.wrappers.sharedobs_wrapper import SharedObsWrapper
 
 
 
@@ -23,7 +24,7 @@ class CommunicationWrapper(BaseWrapper):
                  agent_ids: Optional[List[str]] = None
                  ):
         super().__init__(env)
-
+        env = SharedObsWrapper(env)
         if not isinstance(env, AECEnv):
             raise TypeError("The provided environment must be an instance of AECEnv")
 
