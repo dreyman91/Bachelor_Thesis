@@ -2,15 +2,16 @@
 # SharedOBS wrapper is already instantiated in Communication wrapper
 import numpy as np
 import pandas as pd
-from pettingzoo.butterfly import pistonball_v6
+from mpe2 import simple_spread_v3
 from failure_api.wrappers import (CommunicationWrapper,
                                   NoiseWrapper)
 from failure_api.noise_models import (GaussianNoiseModel)
 from failure_api.communication_models import ProbabilisticModel, ActiveCommunication
 from pettingzoo.utils import aec_to_parallel
 
+
 # Step 1: Create base environment
-env = pistonball_v6.env(n_pistons=6)
+env = simple_spread_v3.env(N=3, max_cycles=25)
 agent_ids = env.possible_agents
 
 # Step 2: Apply communication wrapper with probabilistic failures
