@@ -30,3 +30,9 @@ var/
 # OS files
 .DS_Store
 Thumbs.db
+MARL_Tests/
+QMIX_Training/
+thesis_pictures/
+Evaluation Structure Breakdown.md
+performance_assert_test.py.lprof
+ReadME for the models.md
