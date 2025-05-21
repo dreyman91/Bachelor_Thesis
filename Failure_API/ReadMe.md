@@ -3,9 +3,9 @@ This project provides a modular failure injection API for Multi-Agent Reinforcem
 
 ---
 
-## 📦 Components
+##  Components
 
-### 🧩 Wrappers
+### Wrappers
 
 | Wrapper | Purpose |
 |--------|---------|
@@ -30,7 +30,7 @@ This project provides a modular failure injection API for Multi-Agent Reinforcem
 
 The noise models simulate uncertainty and distortion in agent observations. They are designed to work with `NoiseWrapper` and apply noise selectively to shared observations without affecting masked (zero) values.
 
-### 🧩 Available Noise Models
+### Available Noise Models
 
 
 | Model                | Description                                                                                  |
@@ -95,15 +95,15 @@ env = NoiseWrapper(env, noise_model=noise_model)
 
 ## ⚙️ Features
 
-- ✅ Seamless integration with PettingZoo AEC environments  
-- 🔁 Pluggable failure models for communication dropout, delay, or signal loss  
-- 🔊 Optional noise injection on masked observations  
-- 🧩 Modular design for composing multiple wrappers  
-- 🧪 Compatible with MARL training (e.g., IQL, QMIX)  
+-  Seamless integration with PettingZoo AEC environments  
+-  Pluggable failure models for communication dropout, delay, or signal loss  
+-  Optional noise injection on masked observations  
+-  Modular design for composing multiple wrappers  
+-  Compatible with MARL training (e.g., IQL, QMIX)  
 
 ---
 
-## 📚 Documentation
+##  Documentation
 
 ### `CommunicationWrapper`
 - Applies masking logic using `ActiveCommunication` matrix
@@ -118,7 +118,7 @@ env = NoiseWrapper(env, noise_model=noise_model)
 
 ---
 
-## 🧰 Requirements
+##  Requirements
 
 - Python 3.8+
 - `pettingzoo`
@@ -138,7 +138,7 @@ print(env.get_communication_state())  # Visualize connectivity
 
 ---
 
-## 🧬 Extendability
+## Extendability
 
 Create your own failure or noise models by subclassing `CommunicationModels` or `NoiseModel`, and plug them into the wrappers. Example:
 
@@ -151,7 +151,7 @@ class MyFailureModel(CommunicationModels):
 
 ---
 
-## 📘 Citation
+##  Citation
 
 If used in academic work, cite as:
 

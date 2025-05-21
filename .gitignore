@@ -36,3 +36,7 @@ thesis_pictures/
 Evaluation Structure Breakdown.md
 performance_assert_test.py.lprof
 ReadME for the models.md
+Failure_API/tests/communication_models/test_adversarial_model.py
+Failure_API/src/failure_api/communication_models/adversarial_jamming_model.py
+Failure_API/src/failure_api/communication_models/matrix_model.py
+Failure_API/examples/configurations/probability_and_distance_model.py
