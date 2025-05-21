@@ -12,6 +12,7 @@ matplotlib
 black
 isort
 mpe2
+Box2D
 
 
 # for testing with wrapped environment
