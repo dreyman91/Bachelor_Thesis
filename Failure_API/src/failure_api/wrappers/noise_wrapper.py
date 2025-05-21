@@ -1,9 +1,9 @@
 import numpy as np
 from pettingzoo import AECEnv
 from typing import Optional
-from Failure_API.src.failure_api.wrappers import BaseWrapper
-
-from Failure_API.src.failure_api.noise_models.base_noise_model import NoiseModel
+from .base_wrapper import BaseWrapper
+from .sharedobs_wrapper import SharedObsWrapper
+from ..noise_models.base_noise_model import NoiseModel
 
 
 class NoiseWrapper(BaseWrapper):
@@ -11,7 +11,10 @@ class NoiseWrapper(BaseWrapper):
                  env: AECEnv,
                  noise_model: NoiseModel = None,
                  seed: Optional[int] = None):
+        wrapped_env = SharedObsWrapper(env)
         super().__init__(env)
+        self.env = wrapped_env
+
         self.noise_model = noise_model
         self.reset_rng(seed)
         if self.noise_model:

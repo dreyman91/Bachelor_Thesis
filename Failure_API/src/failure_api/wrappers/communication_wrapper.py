@@ -1,13 +1,13 @@
-from Failure_API.src.failure_api.wrappers.base_wrapper import BaseWrapper
+
 from pettingzoo.utils.env import AgentID, AECEnv, ActionType, ObsType
 import numpy as np
 import copy
 from gymnasium import spaces
 from typing import Optional, List, Any, Dict
-from Failure_API.src.failure_api.communication_models.active_communication import ActiveCommunication
-from Failure_API.src.failure_api.communication_models.base_communication_model import CommunicationModels
-from Failure_API.src.failure_api.communication_models.probabilistic_model import ProbabilisticModel
-from Failure_API.src.failure_api.wrappers.sharedobs_wrapper import SharedObsWrapper
+from .base_wrapper import BaseWrapper
+from ..communication_models.active_communication import ActiveCommunication
+from ..communication_models.base_communication_model import CommunicationModels
+from .sharedobs_wrapper import SharedObsWrapper
 from pettingzoo.utils.env import AECEnv
 
 

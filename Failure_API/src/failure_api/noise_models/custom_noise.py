@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Optional, Any, Callable
 from gymnasium import spaces
-from ..noise_models import NoiseModel
+from .base_noise_model import NoiseModel
 
 class CustomNoise(NoiseModel):
     """User-defined function to apply custom noise to observations. """

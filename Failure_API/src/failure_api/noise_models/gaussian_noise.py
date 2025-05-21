@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Optional, Any, Callable, Dict, Union, Tuple
 from gymnasium import spaces
-from ..noise_models.base_noise_model import NoiseModel
+from .base_noise_model import NoiseModel
 
 
 class GaussianNoiseModel(NoiseModel):

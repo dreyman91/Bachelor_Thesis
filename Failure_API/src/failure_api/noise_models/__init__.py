@@ -7,5 +7,5 @@ __all__ = [
     "NoiseModel",
     "GaussianNoiseModel",
     "LaplacianNoiseModel",
-    "CustomNoise",
+    "CustomNoise"
 ]

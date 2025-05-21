@@ -3,9 +3,6 @@ import numpy as np
 from .active_communication import ActiveCommunication
 from .base_communication_model import CommunicationModels
 from collections import defaultdict
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class BaseMarkovModel(CommunicationModels):

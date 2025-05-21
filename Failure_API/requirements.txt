@@ -1,19 +1,10 @@
-numpy
-pytest
-absl-py
-pettingzoo
 gymnasium
-cloudpickle
-stable-baselines3
+numpy
+pettingzoo
 scipy
-typing_extensions
-pydantic
-matplotlib
-black
-isort
-mpe2
-Box2D
+typing
+collections
+a-b-c
 
 
-# for testing with wrapped environment
-pymunk
+

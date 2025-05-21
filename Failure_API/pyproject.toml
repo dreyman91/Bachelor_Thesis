@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "failure-api"
+version = "0.1.4"
+description = "A modular communication failure API for Multi-Agent Reinforcement Learning environments"
+authors = [
+    { name = "Oluwadamilare Adegun", email = "adegun_dare@icloud.com" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "pettingzoo",
+    "gymnasium",
+    "scipy"
+]
+
+[project.urls]
+Homepage = "https://github.com/dreyman91/Bachelor_Thesis"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

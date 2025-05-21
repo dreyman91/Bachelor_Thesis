@@ -1,4 +1,4 @@
-from Failure_API.src.failure_api.wrappers.base_wrapper import BaseWrapper
+from .base_wrapper import BaseWrapper
 from gymnasium import spaces
 import time
 
