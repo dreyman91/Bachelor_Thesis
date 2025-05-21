@@ -26,6 +26,7 @@ class SignalBasedModel(CommunicationModels):
                  tx_power: float = 15.0,
                  min_strength: float = 0.01,
                  dropout_alpha: float = 0.2,
+                 rng: Optional[np.random.Generator] = None
                  ):
         """
         Initialize the signal-based communication model.
@@ -61,6 +62,8 @@ class SignalBasedModel(CommunicationModels):
         self.tx_power = tx_power
         self.min_strength = min_strength
         self.dropout_alpha = dropout_alpha
+        self.verbose = False
+        self.rng = rng or np.random.default_rng()
 
         # Creating mapping from agent IDs to indices
         self.id_to_idx = {aid: i for i, aid in enumerate(agent_ids)}
@@ -130,6 +133,9 @@ class SignalBasedModel(CommunicationModels):
         # guard clause if no valid positions
         if coords.size == 0:
             return
+
+        if self.verbose:
+            print(f"Coords array for KDTree: {coords.shape}")
 
         # Build KD-Tree for efficient spatial querie
         tree = cKDTree(coords)

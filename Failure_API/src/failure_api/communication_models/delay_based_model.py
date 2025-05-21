@@ -25,7 +25,8 @@ class DelayBasedModel(CommunicationModels):
                  agent_ids: List[str],
                  min_delay: int,
                  max_delay: int,
-                 message_drop_probability: float = 0.1
+                 message_drop_probability: float = 0.1,
+                 rng: Optional[np.random.Generator] = None
                  ):
         """
          Initialize the base delay model.
@@ -44,8 +45,7 @@ class DelayBasedModel(CommunicationModels):
             max_delay = max(max_delay, 0)
 
         if min_delay > max_delay:
-            raise Warning("min_delay > max_delay, values will be swapped.", UserWarning)
-            min_delay, max_delay = max_delay, min_delay
+            raise ValueError("min_delay cannot be greater than max_delay")
 
         if message_drop_probability < 0 or message_drop_probability > 1:
             raise ValueError("message_drop_probability must be between 0 and 1.")
@@ -55,6 +55,7 @@ class DelayBasedModel(CommunicationModels):
         self.max_delay = max_delay
         self.message_drop_probability = message_drop_probability
         self.timestep = 0
+        self.rng = rng or np.random.default_rng()
 
         # Message queues: (sender, receiver) -> deque of (delay_left, success_flag)
         self.message_queues = defaultdict(deque)
@@ -98,6 +99,13 @@ class DelayBasedModel(CommunicationModels):
 
         self.message_queues[key].append((delay, success_flag))
 
+    def validate_queues(self, comms_matrix):
+        for (s, r) in self.message_queues:
+            if s not in comms_matrix.agent_id_to_index:
+                raise KeyError(f"Sender '{s}' not found in communication matrix.")
+            if r not in comms_matrix.agent_id_to_index:
+                raise KeyError(f"Receiver '{r}' not found in communication matrix.")
+
     def process_existing_messages(self, comms_matrix):
         """
         Process existing message queues, deliver expired messages.
@@ -108,6 +116,18 @@ class DelayBasedModel(CommunicationModels):
         3. Keeps delayed messages in their queues
         """
         for (s, r), queue in list(self.message_queues.items()):
+
+            # ===== ADD THIS GUARD =====
+            if not hasattr(comms_matrix, 'agent_id_to_index'):
+                raise TypeError("comms_matrix must have agent_id_to_index for validation")
+
+            if s not in comms_matrix.agent_id_to_index:
+                raise KeyError(f"Sender '{s}' not found in comms matrix agent list.")
+
+            if r not in comms_matrix.agent_id_to_index:
+                raise KeyError(f"Receiver '{r}' not found in comms matrix agent list.")
+            # ===========================
+
             new_queue = deque()
             messages_to_deliver = []
             while queue:

@@ -1,13 +1,14 @@
-from pettingzoo.utils.wrappers import BaseWrapper
+from Failure_API.src.failure_api.wrappers.base_wrapper import BaseWrapper
 from pettingzoo.utils.env import AgentID, AECEnv, ActionType, ObsType
 import numpy as np
+import copy
 from gymnasium import spaces
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from Failure_API.src.failure_api.communication_models.active_communication import ActiveCommunication
 from Failure_API.src.failure_api.communication_models.base_communication_model import CommunicationModels
 from Failure_API.src.failure_api.communication_models.probabilistic_model import ProbabilisticModel
 from Failure_API.src.failure_api.wrappers.sharedobs_wrapper import SharedObsWrapper
-
+from pettingzoo.utils.env import AECEnv
 
 
 class CommunicationWrapper(BaseWrapper):
@@ -18,24 +19,35 @@ class CommunicationWrapper(BaseWrapper):
     communicate with each other, and how their observations and actions are affected by
     communication constraints.
     """
+
     def __init__(self,
                  env: AECEnv[AgentID, ActionType, ObsType],
                  failure_models: List[CommunicationModels] = None,
-                 agent_ids: Optional[List[str]] = None
+                 agent_ids: Optional[List[str]] = None,
+                 verbose: bool = False,
                  ):
-        super().__init__(env)
         env = SharedObsWrapper(env)
+        super().__init__(env)
+        self.env = env
+
         if not isinstance(env, AECEnv):
             raise TypeError("The provided environment must be an instance of AECEnv")
 
+        if not hasattr(env, "reset") or not callable(getattr(env, "reset")):
+            raise ValueError("Provided env does not have a callable reset() method.")
+
         self.agent_ids = agent_ids or list(env.possible_agents)
-        self.seed_val = None
-        self.rng = np.random.default_rng(self.seed_val)
         self.comms_matrix = ActiveCommunication(self.agent_ids)
         self.failure_models = failure_models or []
         for model in self.failure_models:
             model.rng = self.rng
 
+        self.verbose = verbose
+        self._step_counter = 0
+        self._last_update_step = -1
+        self._agent_index_cache = {}
+        self._masked_obs_cache = {}
+        self._zero_cache = {}
         if failure_models is None:
             raise ValueError("No failure model(s) provided.")
         elif isinstance(failure_models, list):
@@ -43,16 +55,31 @@ class CommunicationWrapper(BaseWrapper):
         else:
             self.failure_models = [failure_models]
 
+
+
+    @property
+    def agents(self):
+        return self.env.agents
+
+    @property
+    def agents(self):
+        return list(self.env.agents)
+
     def _update_communication_state(self):
         """
         Update the communication matrix by applying all failure models.
 
         This internal method applies each failure model in sequence to the communication matrix,
         determining which agents can communicate with each other for the current step.
+
+        The communication state is only updated once per step cycle
         """
-        self.comms_matrix.reset()
-        for model in self.failure_models:
-            model.update_connectivity(self.comms_matrix)
+        agent_list = list(self.env.agents)
+        if self._last_update_step < self._step_counter:
+            self.comms_matrix.reset()
+            for model in self.failure_models:
+                model.update_connectivity(self.comms_matrix)
+            self._last_update_step = self._step_counter
 
     def filter_action(self, agent: str, action: Any) -> Any:
         """
@@ -85,41 +112,74 @@ class CommunicationWrapper(BaseWrapper):
                 return 0
         return action
 
-    def _apply_comm_mask(self, obs: dict, receiver: str) -> dict:
-        """
-        Masks the part of the observation dictionary that the receiver
-        should not see based on the communication matrix.
+    def _apply_comm_mask(self, obs: Dict[str, np.ndarray], agent: str, output_dict=None) -> Dict[str, np.ndarray]:
+        """Apply communication mask to the observation dictionary for a specific agent.
 
-        :param obs: The original observation dictionary.
-        :param receiver: The ID of the agent receiving the observation.
-        :return: The masked observation dictionary where information from agents that cannot
-            communicate with the receiver is zeroed out.
+        Args:
+            obs: Original observation dictionary
+            agent: Agent ID receiving the observation
+            output_dict: Optional pre-allocated dictionary to reuse
         """
-        # Early exit if agents can communicate with receiver
-        if all(
-            self.comms_matrix.can_communicate(sender, receiver) or sender == receiver
-            for sender in self.agent_ids
-        ):
-            return obs
+        if output_dict is None:
+            output_dict = {}
+        output_dict.clear()
 
-        # Otherwise, apply masking
-        for sender in self.agent_ids:
-            if sender != receiver and not self.comms_matrix.can_communicate(
-                    sender, receiver
-            ):
-                if sender in obs:
-                    obs[sender] = np.zeros_like(obs[sender])
-        return obs
+        # Cache matrix lookup
+        if not hasattr(self, '_last_matrix_step'):
+            self._last_matrix_step = -1
+            self._comm_mask_cache = {}
+
+        # Only recalculate masks when matrix changes
+        if self._last_matrix_step != self._last_update_step:
+            self._comm_mask_cache.clear()
+            self._last_matrix_step = self._last_update_step
+
+        # Get cached mask
+        if agent not in self._comm_mask_cache:
+            if agent not in self._agent_index_cache:
+                self._agent_index_cache[agent] = self.agent_ids.index(agent)
+            agent_index = self._agent_index_cache[agent]
+
+            # Cache the mask for this agent
+            comm_matrix = self.comms_matrix.get_boolean_matrix()
+            self._comm_mask_cache[agent] = comm_matrix[:, agent_index]
+
+        comm_mask = self._comm_mask_cache[agent]
+
+        # Use precomputed indices for faster iteration
+        if not hasattr(self, '_sender_indices'):
+            self._sender_indices = {sender: i for i, sender in enumerate(self.agent_ids)}
+
+        # Direct mask application without extra allocations
+        # MISSING LOOP: Need to iterate through all potential senders
+        for sender, sender_obs in obs.items():
+            if sender in self._sender_indices:
+                sender_index = self._sender_indices[sender]
+                if sender == agent or comm_mask[sender_index]:
+                    output_dict[sender] = sender_obs
+
+        return output_dict
 
     def step(self, action: Any):
-        """Take a step in the environment"""
+        """Step function compatible with aec_to_parallel and PettingZoo cycle rules."""
         current_agent = self.env.agent_selection
-        if self.env.terminations.get(current_agent, False) or self.env.truncations.get(current_agent, False):
-            self.env.step(None)  # Ensure the environment gets None action
-            return
-        filtered_action = self.filter_action(current_agent, action)
-        self.env.step(filtered_action)
+
         self._update_communication_state()
+
+        # Check if this agent is terminated, but still required to complete the cycle
+        is_dead = self.env.terminations.get(current_agent, False) or self.env.truncations.get(current_agent, False)
+
+        if is_dead:
+            # Step with None to preserve agent cycle — do NOT skip
+            if self.verbose:
+                print(f"⚠️ Agent {current_agent} is already done. Stepping with None.")
+            self.env.step(None)
+        else:
+            # Apply communication logic as usual
+            filtered_action = self.filter_action(current_agent, action)
+            self.env.step(filtered_action)
+
+        self._step_counter += 1
 
     def reset_rng(self, seed=None):
         self.seed_val = seed
@@ -127,29 +187,46 @@ class CommunicationWrapper(BaseWrapper):
 
     def reset(self, seed=None, options=None):
         """Reset the environment and communication state."""
+
+        self._step_counter = 0
+        self._last_update_step = -1
         self.reset_rng(seed)
         result = self.env.reset(seed=seed, options=options)
         self.comms_matrix.reset()
-        self._update_communication_state()
 
         for model in self.failure_models:
             model.rng = self.rng
-        return result
-
-    def observe(self, agent: str):
 
         self._update_communication_state()
-        raw_obs = self.env.observe(agent)
 
-        if isinstance(raw_obs, dict):
-            raw_obs = self._apply_comm_mask(raw_obs, agent)
+        # If a result is None, create proper return values
+        if result is None:
+            observations = {agent: None for agent in self.env.agents}
+            infos = {agent: {} for agent in self.env.agents}
+            return observations, infos
+        return result
 
-        if hasattr(self, "failure_models"):
-            for model in self.failure_models:
-                if hasattr(model, "get_corrupted_obs"):
-                    raw_obs = model.get_corrupted_obs(agent, raw_obs)
+    def observe(self, agent: str) -> Dict[str, np.ndarray]:
+        """Override to apply communication state masking with batch optimization."""
+        # Reuse the observation dictionary
+        shared_obs = self.env.observe(agent)
 
-        return raw_obs
+        # If not a dictionary, something went wrong - can't perform masking
+        if not isinstance(shared_obs, dict):
+            raise TypeError(f"Expected dictionary from SharedObsWrapper, got {type(shared_obs)}")
+
+        # Filter to valid agents
+        raw_obs = {
+            sender: vec
+            for sender, vec in shared_obs.items()
+            if sender in self.agent_ids and sender in self.env.agents
+        }
+
+        # Apply communication mask
+        if agent not in self._masked_obs_cache:
+            self._masked_obs_cache[agent] = {}
+
+        return self._apply_comm_mask(raw_obs, agent, self._masked_obs_cache[agent])
 
     def last(self, observe: bool = True):
 
@@ -158,23 +235,15 @@ class CommunicationWrapper(BaseWrapper):
         agent = self.env.agent_selection
         if agent not in self.env.agents:
             return None, 0.0, True, False, {}
-        obs, rew, term, trunc, info = self.env.last(observe)
+        _, rew, term, trunc, info = self.env.last(observe)
         if not observe:
             return None, rew, term, trunc, info
 
-        current_agent = self.env.agent_selection
-        if isinstance(obs, dict):
-            obs = self._apply_comm_mask(obs, current_agent)
-
-        if hasattr(self, "failure_models"):
-            for model in self.failure_models:
-                if hasattr(model, "get_corrupted_obs"):
-                    obs = model.get_corrupted_obs(agent, obs)
-
+        obs = self.observe(agent)
         return obs, rew, term, trunc, info
 
     def get_communication_state(self):
-
+        self._update_communication_state()
         return self.comms_matrix.get_state()
 
     def add_failure_model(self, model: CommunicationModels):

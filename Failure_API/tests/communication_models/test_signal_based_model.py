@@ -4,7 +4,7 @@ import time
 from scipy.spatial import cKDTree
 from collections import defaultdict
 
-from Failure_API.src.failure_api.communication_models.signal_based_failure import SignalBasedModel
+from Failure_API.src.failure_api.communication_models.signal_based_model import SignalBasedModel
 from Failure_API.src.failure_api.communication_models.active_communication import ActiveCommunication
 
 

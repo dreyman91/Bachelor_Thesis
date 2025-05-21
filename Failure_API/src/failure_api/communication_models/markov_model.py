@@ -41,11 +41,16 @@ class BaseMarkovModel(CommunicationModels):
         """
         super().__init__()
         self.agent_ids = agent_ids
-        self.transition_probabilities = transition_probabilities or {}
+        self.transition_probabilities = transition_probabilities if transition_probabilities is not None else {}
         self.default_matrix = default_matrix if default_matrix is not None else np.array([
             [0.9, 0.1],  # From disconnected: 90% stay disconnected, 10% become connected
             [0.1, 0.9]  # From connected: 10% become disconnected, 90% stay connected
         ])
+
+        if self.default_matrix.shape != (2, 2):
+            raise ValueError("default_matrix must be 2x2")
+        if not np.allclose(self.default_matrix.sum(axis=1), 1.0, atol=1e-6):
+            raise ValueError("Each row of default_matrix must sum to 1.")
 
         # Validate transition matrices
         self._validate_transition_matrices()
@@ -121,6 +126,7 @@ class BaseMarkovModel(CommunicationModels):
         Update connectivity for all agent pairs based on Markov transitions.
         Args:
             comms_matrix: Communication matrix to update
+            
         """
         for sender in self.agent_ids:
             for receiver in self.agent_ids:

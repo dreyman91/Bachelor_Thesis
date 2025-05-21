@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Dict, Callable, Any
+from typing import List, Dict, Callable, Any, Optional
 from .active_communication import ActiveCommunication
 from .base_communication_model import CommunicationModels
 
@@ -14,7 +14,8 @@ class DistanceModel(CommunicationModels):
                  distance_threshold: float,
                  pos_fn: Callable[[], Dict[str, np.ndarray]],
                  failure_prob: float = 0.0,
-                 max_bandwidth: float = 1.0
+                 max_bandwidth: float = 1.0,
+                 rng: Optional[np.random.Generator] = None
                  ):
         """
         Initialize the distance-based communication model.
@@ -41,6 +42,7 @@ class DistanceModel(CommunicationModels):
         self.pos_fn = pos_fn
         self.failure_prob = failure_prob
         self.max_bandwidth = max_bandwidth
+        self.rng = rng or np.random.default_rng()
 
     def calculate_distance(self, pos1: np.ndarray, pos2: np.ndarray) -> float:
         """
@@ -87,8 +89,28 @@ class DistanceModel(CommunicationModels):
         """
         Update connectivity matrix based on agent distances and random failures.
         """
-        # Get current positions of all agents
-        positions = self.pos_fn()
+        current_agents = comms_matrix.agent_ids
+        model_agent_ids = self.agent_ids
+
+        # Raise error if comms_matrix includes unknown agents
+        assert set(current_agents).issubset(set(model_agent_ids)), (
+            f"[DistanceModel] comms_matrix has unknown agents: "
+            f"{set(current_agents) - set(model_agent_ids)}")
+
+        positions = {}
+        for agent in current_agents:
+            pos = self.pos_fn(agent)
+
+            if not isinstance(pos, np.ndarray):
+                raise ValueError(f"Position for agent '{agent}' must be a numpy array, got {type(pos)}.")
+
+            if pos.dtype.kind not in {"f", "i"}:
+                raise ValueError(f"Position array for '{agent}' must contain numeric values.")
+
+            if np.isnan(pos).any():
+                raise ValueError(f"Position for agent '{agent}' contains NaNs.")
+
+            positions[agent] = pos
 
         # Update connectivity for each agent pair
         for sender in sorted(self.agent_ids):

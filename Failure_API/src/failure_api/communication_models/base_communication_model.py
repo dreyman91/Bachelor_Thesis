@@ -16,6 +16,9 @@ class CommunicationModels(ABC):
         """
         self.rng = rng
 
+    def get_state(self):
+        return self.matrix
+
     @abstractmethod
     def update_connectivity(self, comms_matrix: ActiveCommunication):
         """Updates the ActiveCommunication and inject failures"""

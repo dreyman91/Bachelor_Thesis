@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List
+from typing import List, Optional
 from .active_communication import ActiveCommunication
 from .base_communication_model import CommunicationModels
 
@@ -20,6 +20,7 @@ class ProbabilisticModel(CommunicationModels):
                  agent_ids: List[str],
                  failure_prob: float,
                  max_bandwidth: float = 1.0,
+                 rng: Optional[np.random.Generator] = None
                  ):
         super().__init__()
         self.agent_ids = agent_ids
@@ -32,6 +33,7 @@ class ProbabilisticModel(CommunicationModels):
 
         self.failure_prob = failure_prob
         self.max_bandwidth = max_bandwidth
+        self.rng = rng or np.random.default_rng()
 
     def get_failure_probability(self, sender: str, receiver: str) -> float:
         """
@@ -46,25 +48,24 @@ class ProbabilisticModel(CommunicationModels):
         For each sender-receiver pair, randomly determine if communication
         succeeds or fails based on the failure probability.
         """
+        agent_ids = comms_matrix.agent_ids
+        N = len(agent_ids)
 
-        for sender in sorted(comms_matrix.agent_ids):
-            for receiver in sorted(comms_matrix.agent_ids):
-                if sender == receiver:
-                    continue
-                # Get failure probability for this specific link
-                p_fail = self.get_failure_probability(sender, receiver)
+        # Generate full NxN matrix of Bernoulli outcomes (True = success)
+        success_mask = self.rng.random((N, N)) >= self.failure_prob
 
-                # Perform Bernoulli trial
-                if self.rng.random() < p_fail:
-                    bandwidth = 0.0  # Failed
-                else:
-                    bandwidth = self.max_bandwidth  # Success
+        # Remove self-connections
+        np.fill_diagonal(success_mask, False)
 
-                # Update matrix
-                comms_matrix.update(sender, receiver, bandwidth)
+        # Compute bandwidth matrix: 0.0 for failure, max_bandwidth for success
+        bandwidth_matrix = np.where(success_mask, self.max_bandwidth, 0.0)
+
+        comms_matrix.set_matrix(bandwidth_matrix)
 
         if self.failure_prob == 0.0:
-            assert np.all(comms_matrix.get_state()), "[BUG] Failure at p=0.0"
+            state = comms_matrix.get_state()
+            assert np.all(state[~np.eye(len(state), dtype=bool)]), "[BUG] Failure at p=0.0 (excluding self-links)"
+
     @staticmethod
     def create_initial_matrix(agent_ids: List[str]) -> np.ndarray:
         """
