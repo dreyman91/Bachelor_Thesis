@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "failure-api"
-version = "0.1.5"
+version = "0.1.6"
 description = "A modular communication failure API for Multi-Agent Reinforcement Learning environments"
 authors = [
     { name = "Oluwadamilare Adegun", email = "adegun_dare@icloud.com" }
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dreyman91/Bachelor_Thesis"
+Homepage = "https://github.com/dreyman91/FailureAPI"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

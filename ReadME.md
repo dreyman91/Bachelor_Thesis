@@ -42,7 +42,7 @@ pip install failure-api
 ###  Noise Models
 
 | Model                 | Description                                                          |
-| --------------------- | -------------------------------------------------------------------- |
+| --------------------- |----------------------------------------------------------------------|
 | `GaussianNoiseModel`  | Adds Gaussian noise: `X + N(μ, σ²)`; useful for random sensor noise. |
 | `LaplacianNoiseModel` | Adds Laplacian noise: `X + Laplace(μ, b)`; good for sparse spikes.   |
 | `CustomNoise`         | Accepts any callable function for custom distortion logic.           |

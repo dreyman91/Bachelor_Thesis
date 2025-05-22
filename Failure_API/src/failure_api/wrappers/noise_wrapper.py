@@ -77,7 +77,6 @@ class NoiseWrapper(BaseWrapper):
                 print("Mean magnitude of masked values after noise:", np.linalg.norm(result[zeroed]))
 
             return result
-
         return raw_obs
 
     def last(self, observe: bool = True):
