@@ -27,7 +27,7 @@ pip install failure-api
 
 ---
 
-### 🔌 Communication Models
+###  Communication Models
 
 | Model                | Description                                                                |
 | -------------------- | -------------------------------------------------------------------------- |
@@ -39,7 +39,7 @@ pip install failure-api
 
 ---
 
-### 🎙️ Noise Models
+###  Noise Models
 
 | Model                 | Description                                                          |
 | --------------------- | -------------------------------------------------------------------- |
@@ -54,9 +54,9 @@ All models inherit from the `NoiseModel` base class and implement `.apply()`.
 ##  Example Usage
 
 ```python
-from pettingzoo.mpe import simple_spread_v3
+from mpe2 import simple_spread_v3
 from failure_api.wrappers import CommunicationWrapper, NoiseWrapper
-from failure_api.communication_models import ProbabilisticModel
+from failure_api.communication_models import ProbabilisticModel, BaseMarkovModel
 from failure_api.noise_models import GaussianNoiseModel
 from pettingzoo.utils import aec_to_parallel
 
@@ -65,21 +65,66 @@ env = simple_spread_v3.env(N=3, max_cycles=25)
 agent_ids = env.possible_agents
 
 # Apply communication failure model
-model = ProbabilisticModel(agent_ids, failure_prob=0.3)
-env = CommunicationWrapper(env, failure_models=[model])
-
-# Add Gaussian noise to visible observations
-env = NoiseWrapper(env, GaussianNoiseModel(std=0.5))
+model = ProbabilisticModel(agent_ids=agent_ids, failure_prob=0.8)
+wrapped_env = CommunicationWrapper(env, failure_models=[model])
 
 # Convert to parallel API
-env = aec_to_parallel(env)
+parallel_env = aec_to_parallel(wrapped_env)
 
-# Run one episode
-observations = env.reset(seed=42)
+# Run Simulation
+observations, _  = parallel_env.reset(seed=42)
+initial_comm_matrix = wrapped_env.get_communication_state().astype(int)
+print(f"\nInitial Communication Matrix (0=masked, 1=visible)\n")
+print(initial_comm_matrix)
+
 for _ in range(10):
-    actions = {agent: env.action_space(agent).sample() for agent in env.agents}
-    observations, rewards, terminations, truncations, infos = env.step(actions)
-    print("Comm matrix:\n", env.get_communication_state())
+    actions = {agent: parallel_env.action_space(agent).sample() for agent in parallel_env.agents}
+    observations, rewards, terminations, truncations, infos = parallel_env.step(actions)
+    print(f"Masked State: (0=masked, 1=visible)\n", wrapped_env.get_communication_state())
+    
+    if all(terminations.values()) or all(truncations.values()):
+        break
+
+    
+#%%
+# OPTIONAL: Noise model, can be used with/without Communication wrapper
+#  to compare observations before noise is injected, the communication wrapper
+# needs to be called to get the raw observation.
+
+
+# Base PettingZoo environment
+noise_env = simple_spread_v3.env(N=3, max_cycles=25)
+agent_ids = env.possible_agents
+
+comm_wrapper = CommunicationWrapper(noise_env, failure_models=[ProbabilisticModel(
+    agent_ids, failure_prob=0.8
+)]) # step will not be taken so as not to mask observations 
+
+# convert to parallel env
+parallel_comm_wrapper = aec_to_parallel(comm_wrapper)
+comm_obs, _ = parallel_comm_wrapper.reset(seed=42)
+comm_obs_agent_0 = comm_obs[agent_ids[0]]
+
+# Inject Noise 
+noise_wrapper = NoiseWrapper(comm_wrapper, noise_model=
+                             GaussianNoiseModel(mean=0.1, std=0.2 ))
+
+# Convert to parallel API
+noise_parallel_env = aec_to_parallel(noise_wrapper)
+
+# Run Simulation
+noisy_obs, _  = noise_parallel_env.reset(seed=42)
+
+noisy_obs_agent_0 = noisy_obs[agent_ids[0]]
+
+print("\nComparison for agent_0")
+for other_agent in comm_obs_agent_0:
+    print(f"\nObservation from {other_agent}:")
+    print(f" Clean:")
+    print(f"{comm_obs_agent0[other_agent]:.3f}")
+    
+    print(f"\n Noisy :")
+    print(f"{noisy_obs_agent0[other_agent]:.3f}")
 ```
 
 ---

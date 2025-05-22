@@ -46,30 +46,31 @@ class NoiseWrapper(BaseWrapper):
             for sender, obs_values in raw_obs.items():
                 if sender == agent:
                     noisy_obs[sender] = obs_values
-                else:
+                elif isinstance(obs_values, np.ndarray) and obs_values.size > 0:
                     obs_values = obs_values.copy()
-                    if obs_values is not None and obs_values.any():
-                        if sender in observation_space:
-                            noisy = self.noise_model.apply(obs_values, observation_space[sender])
-                        else:
-                            noisy = self.noise_model.apply(obs_values)
 
-                        result = np.where(obs_values != 0, noisy, obs_values)
-
-
-                        zeroed = obs_values == 0
-                        if np.any(zeroed):
-                            print(f"[Debug] {agent}←{sender} masked ∥noise∥ = {np.linalg.norm(result[zeroed])}")
+                    if sender in observation_space:
+                        noisy = self.noise_model.apply(obs_values, observation_space[sender])
                     else:
-                        result = obs_values
-                    noisy_obs[sender] = result
-            return noisy_obs
+                        noisy = self.noise_model.apply(obs_values)
 
+                    # Preserve zero-masked values
+                    result = np.where(obs_values != 0, noisy, obs_values)
+
+                    # Debug: print noise norm on masked entries
+                    zeroed = obs_values == 0
+                    if np.any(zeroed):
+                        print(f"[Debug] {agent}<-{sender} masked ||noise|| = {np.linalg.norm(result[zeroed])}")
+
+                    noisy_obs[sender] = result
+                else:
+                    # Edge case: not a valid array or empty
+                    noisy_obs[sender] = obs_values
+            return noisy_obs
         # Handle flat single-agent observations
         elif isinstance(raw_obs, np.ndarray):
             noisy = self.noise_model.apply(raw_obs, observation_space)
             result = np.where(raw_obs != 0, noisy, raw_obs)
-
 
             zeroed = raw_obs == 0
             if np.any(zeroed):
