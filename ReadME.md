@@ -226,7 +226,7 @@ If you use this in academic work, please cite:
 
 ## 🔗 Links
 
-* 🔗 GitHub: [dreyman91/Bachelor\_Thesis](https://github.com/dreyman91/Bachelor_Thesis)
+* 🔗 GitHub: [https://github.com/dreyman91/FailureAPI](https://github.com/dreyman91/FailureAPI)
 * 📦 PyPI: [pypi.org/project/failure-api](https://pypi.org/project/failure-api/)
 
 ---
