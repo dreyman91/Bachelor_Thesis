@@ -70,20 +70,19 @@ class BaseMarkovModel(CommunicationModels):
         for key, matrix in self.transition_probabilities.items():
             # Check shape
             if not isinstance(matrix, np.ndarray) or matrix.shape != (2, 2):
-                logger.warning(f"Warning! Invalid transition matrix for {key}. Using default")
+                raise ValueError(f"Warning! Invalid transition matrix for {key}. Using default")
                 self.transition_probabilities[key] = self.default_matrix.copy()
                 continue
 
             # Check value range
             if np.any(matrix < 0) or np.any(matrix > 1):
-                logger.warning(f"Warning! Transition matrix for {key} has invalid probability values. Expected [0, "
+                raise ValueError(f"Warning! Transition matrix for {key} has invalid probability values. Expected [0, "
                                f"1]. Clipping")
                 self.transition_probabilities[key] = np.clip(matrix, 0, 1)
 
-            # Check row sums
             row_sums = matrix.sum(axis=1)
             if not np.allclose(row_sums, 1.0, rtol=1e-5):
-                logger.warning(
+                raise ValueError(
                     f"Warning! Invalid probability values for  {key}. Row sums must be 1.0. Got: {row_sums}. "
                     f"Normalizing")
                 self.transition_probabilities[key] = matrix / row_sums[:, np.newaxis]

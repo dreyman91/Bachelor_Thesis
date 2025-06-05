@@ -9,18 +9,10 @@ from failure_api.wrappers import CommunicationWrapper
 from failure_api.communication_models import (BaseMarkovModel, SignalBasedModel)
 import numpy as np
 from pettingzoo.utils import aec_to_parallel
+from utils.position_utils import make_position_fn
 
 
-# Helper function to extract agent positions from environment state
-def get_positions(env):
-    positions = {}
-    for agent_id in env.agents:
-        # Agent positions are the first two elements of the observation
-        obs = env.observe(agent_id)
-        if isinstance(obs, np.ndarray) and len(obs) >= 2:
-            positions[agent_id] = obs[:2]  # x, y positions
-        # print(f"Agent Positions: {positions}")
-    return positions
+
 
 
 # Define Markov transition probabilities
@@ -47,7 +39,7 @@ wrapped_ms_env = CommunicationWrapper(
             tx_power=150.0,
             min_strength=0.3,
             dropout_alpha=0.05,
-            pos_fn=lambda: get_positions(ms_env)
+            pos_fn=make_position_fn(ms_env, return_batch=True)
         )
     ]
 )
@@ -55,14 +47,6 @@ wrapped_ms_env = CommunicationWrapper(
 # ---- Convert to parallel environment
 par_wrapped_ms_env = aec_to_parallel(wrapped_ms_env)
 observations, infos = par_wrapped_ms_env.reset(seed=42)
-# print(f"Environment initialized with {len(agent_ids)} agents")
-
-
-# Print initial positions
-# positions = get_positions(ms_env)
-# print("\nInitial agent positions:")
-# for agent_id, pos in positions.items():
-#     print(f"{agent_id}: {pos}")
 
 history = []
 
